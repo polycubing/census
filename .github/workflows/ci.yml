@@ -43,14 +43,14 @@ jobs:
       POLYCUBE_AT_HOME_URL: postgres://postgres:postgres@localhost:5432/polycube_at_home_test
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: ruby/setup-ruby@v1
         with:
           bundler-cache: true
 
       # Brewfile covers local macOS setup. Runners build both solvers from
       # source, into vendor/ where script/setup already puts drat-trim.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         id: solvers
         with:
           path: vendor

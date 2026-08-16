@@ -6,18 +6,22 @@ ENV["POLYCUBE_AT_HOME_URL"] ||= "postgres:///polycube_at_home_test"
 
 require_relative "../lib/census"
 
-# Whether a coordinator database is actually there.
+# Whether a coordinator database is actually there and usable.
 #
 # Building a Store proves nothing, because the pool opens connections lazily.
 # The old guard did exactly that and so never skipped anything, which turned
-# every @home spec into a failure on machines without Postgres. This runs a
-# real query instead, once, and remembers the answer.
+# every @home spec into a failure on machines without Postgres.
+#
+# Loading the schema is the check, rather than a query against it. An empty
+# database answers a connection but raises PG::UndefinedTable on the first
+# select, so querying would report a brand new database as unreachable. This
+# is also idempotent, and exactly what every :home spec does next anyway.
 module CoordinatorDatabase
   def self.reachable?
     return @reachable unless @reachable.nil?
 
     store = Census::AtHome::Store.new
-    store.status
+    store.load_schema File.expand_path("../db/at_home.sql", __dir__)
     store.close
     @reachable = true
   rescue StandardError => error
