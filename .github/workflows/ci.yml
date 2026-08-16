@@ -5,24 +5,82 @@ on:
     branches: [main]
   pull_request:
 
+# A newer push to the same branch makes the older run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Pinned to what the census records actually cite. Building from upstream
+  # master meant CI tested whatever the solvers became today, while the archive
+  # claimed kissat 4.0.4 produced its refutations.
+  KISSAT_VERSION: rel-4.0.4
+  DRAT_TRIM_COMMIT: 2e3b2dc0ecf938addbd779d42877b6ed69d9a985
+
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    # The coordinator, server and archiver specs need a real database. Without
+    # one they skip, and 49 of them did, leaving the whole @home layer untested.
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: polycube_at_home_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      POLYCUBE_AT_HOME_URL: postgres://postgres:postgres@localhost:5432/polycube_at_home_test
+
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: ruby/setup-ruby@v1
         with:
           bundler-cache: true
-      # Brewfile covers local macOS setup; runners build kissat from source.
-      - run: |
-          git clone --depth 1 https://github.com/arminbiere/kissat /tmp/kissat
-          cd /tmp/kissat && ./configure && make -j
-          echo "/tmp/kissat/build" >> "$GITHUB_PATH"
-      # drat-trim has no Homebrew formula either, so script/setup vendors it and
-      # CI does the same. Proof-checking specs skip when it is absent, so its
-      # absence must fail here instead of quietly thinning the suite.
-      - run: |
-          git clone --depth 1 https://github.com/marijnheule/drat-trim.git vendor/drat-trim
+
+      # Brewfile covers local macOS setup. Runners build both solvers from
+      # source, into vendor/ where script/setup already puts drat-trim.
+      - uses: actions/cache@v4
+        id: solvers
+        with:
+          path: vendor
+          key: solvers-${{ runner.os }}-${{ env.KISSAT_VERSION }}-${{ env.DRAT_TRIM_COMMIT }}
+
+      - if: steps.solvers.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch "$KISSAT_VERSION" https://github.com/arminbiere/kissat vendor/kissat
+          cd vendor/kissat && ./configure && make -j
+
+      - if: steps.solvers.outputs.cache-hit != 'true'
+        run: |
+          git clone https://github.com/marijnheule/drat-trim.git vendor/drat-trim
+          git -C vendor/drat-trim checkout --quiet "$DRAT_TRIM_COMMIT"
           make -C vendor/drat-trim drat-trim
+
+      # Specs skip when a solver is absent, so a build that failed has to fail
+      # here rather than quietly thin the suite into a green run.
+      - run: |
+          test -x vendor/kissat/build/kissat || { echo "kissat did not build"; exit 1; }
           test -x vendor/drat-trim/drat-trim || { echo "drat-trim did not build"; exit 1; }
-      - run: script/cibuild
+          echo "$PWD/vendor/kissat/build" >> "$GITHUB_PATH"
+
+      # Skipping is how this suite copes with a missing dependency, which makes
+      # a skip in CI a silent hole rather than a convenience. Every dependency
+      # is present above, so anything pending here means one of them broke.
+      - run: |
+          set -o pipefail
+          script/cibuild | tee /tmp/rspec.log
+          if grep -qE "[0-9]+ pending" /tmp/rspec.log; then
+            echo "::error::specs were skipped, so a dependency is missing and coverage is thinner than it looks"
+            exit 1
+          fi
