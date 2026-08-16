@@ -75,12 +75,18 @@ jobs:
           echo "$PWD/vendor/kissat/build" >> "$GITHUB_PATH"
 
       # Skipping is how this suite copes with a missing dependency, which makes
-      # a skip in CI a silent hole rather than a convenience. Every dependency
-      # is present above, so anything pending here means one of them broke.
+      # a skip in CI a silent hole rather than a convenience. This job installs
+      # Postgres and drat-trim, so a skip blaming either one means the setup
+      # above broke and the suite is thinner than its green tick suggests.
+      #
+      # The IPASIR specs are exempt and expected to skip. script/build-ipasir
+      # links a macOS .dylib against Homebrew's libcadical, so a Linux runner
+      # cannot build it without porting the script first.
       - run: |
           set -o pipefail
           script/cibuild | tee /tmp/rspec.log
-          if grep -qE "[0-9]+ pending" /tmp/rspec.log; then
-            echo "::error::specs were skipped, so a dependency is missing and coverage is thinner than it looks"
+          if grep -qE "coordinator database unavailable|drat-trim not built" /tmp/rspec.log; then
+            echo "::error::specs skipped for a dependency this job installs, so coverage is thinner than it looks"
+            grep -E "coordinator database unavailable|drat-trim not built" /tmp/rspec.log | sort -u
             exit 1
           fi
