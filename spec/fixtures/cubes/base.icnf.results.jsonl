@@ -1,0 +1,5 @@
+{"cube":0,"verdict":"UNSATISFIABLE","seconds":0.6}
+{"cube":2,"verdict":"UNSATISFIABLE","seconds":0.7}
+{"cube":3,"verdict":"TIMEOUT","seconds":600.0}
+{"cube":1,"verdict":"UNSATISFIABLE","seconds":12.4}
+{"cube":3,"verdict":"TIMEOUT","seconds":3600.1}
