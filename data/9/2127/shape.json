@@ -10,7 +10,16 @@
   "tiles_with_reflections": null,
   "certificate": null,
   "heesch": null,
-  "budgets": { "box_max_volume": 128, "torus_max_index": 72 },
+  "budgets": { "box_max_volume": 128, "corona_depth": 3, "torus_max_index": 72 },
   "credits": { "prior_art": null, "solved_by": "polycube-census v0.1.0", "verified_by": null },
-  "reached": { "corona_sat": 2 }
+  "reached": { "corona_sat": 2 },
+  "attempts": [
+    {
+      "as_of": "2026-10-06",
+      "core_hours": 3300,
+      "depth": 3,
+      "notes": "approximate total: kissat 4.0.4 and cadical 3 (source builds) one core each on the colo since 2026-08-12, 1,338 hours each as of 2026-10-06, no proof output; kissat on the laptop 128.4 hours, stopped 2026-08-16; three cube-and-conquer campaigns (4,096-way, 192-way, 25,920-way) through 2026-08-14, ledgers kept",
+      "status": "running"
+    }
+  ]
 }
