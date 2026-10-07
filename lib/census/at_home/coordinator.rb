@@ -147,13 +147,24 @@ module Census
         Array.new(jobs) do
           Thread.new do
             while (held = queue.pop)
-              outcome = File.exist?(held[:path]) ? check_delivered(wanted: held, path: held[:path]) : nil
-              label = outcome.nil? ? "missing" : (outcome[:accepted] ? "verified" : "not verified")
+              label = recheck_one(held)
               lock.synchronize { tally[label] += 1 }
             end
           end
         end.each(&:join)
         tally
+      end
+
+      # A held file that is not the size the claim promised is not the proof,
+      # however it got that way, and is asked for again rather than checked.
+      def recheck_one(held)
+        unless File.exist?(held[:path]) && File.size(held[:path]) == held[:bytes]
+          File.delete(held[:path]) if File.exist?(held[:path])
+          store.record_proof(id: held[:id], state: "wanted", note: "held bytes did not match the claim, asked for again")
+          return "asked again"
+        end
+
+        check_delivered(wanted: held, path: held[:path])[:accepted] ? "verified" : "not verified"
       end
 
       # Take delivery of a proof and check it.
@@ -284,11 +295,19 @@ module Census
         { accepted: false, note: "proof stored but unchecked: #{error.message}" }
       end
 
+      # Written under a temporary name and renamed into place, so a write the
+      # server dies in the middle of leaves nothing under the digest's name.
+      # A file already there is kept only if it is the whole proof: a server
+      # restart once left a 19 MB prefix of a 76 MB proof, and every later
+      # delivery of that digest trusted it.
       def stored_at(sha256, bytes)
         FileUtils.mkdir_p(proofs)
         path = File.join(proofs, "#{sha256}.drat")
-        File.binwrite(path, bytes) unless File.exist?(path)
+        return path if File.exist?(path) && File.size(path) == bytes.bytesize && Digest::SHA256.file(path).hexdigest == sha256
 
+        arriving = "#{path}.#{Process.pid}.arriving"
+        File.binwrite(arriving, bytes)
+        File.rename(arriving, path)
         path
       end
 

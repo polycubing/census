@@ -227,7 +227,8 @@ module Census
       def held_proofs(states:)
         rows = synchronize do |connection|
           connection.exec_params(<<~SQL, [PG::TextEncoder::Array.new.encode(states)])
-            SELECT results.id, results.proof_sha256, results.proof_path, results.unit_id, units.payload AS unit_payload
+            SELECT results.id, results.proof_sha256, results.proof_bytes, results.proof_path, results.unit_id,
+                   units.payload AS unit_payload
               FROM results JOIN units ON units.id = results.unit_id
              WHERE results.proof_state = ANY($1) AND results.proof_path IS NOT NULL
              ORDER BY results.id
@@ -235,8 +236,8 @@ module Census
         end
 
         rows.map do |row|
-          { id: Integer(row["id"]), sha256: row["proof_sha256"], path: row["proof_path"],
-            unit_id: Integer(row["unit_id"]), unit: JSON.parse(row["unit_payload"], symbolize_names: true) }
+          { id: Integer(row["id"]), sha256: row["proof_sha256"], bytes: row["proof_bytes"] && Integer(row["proof_bytes"]),
+            path: row["proof_path"], unit_id: Integer(row["unit_id"]), unit: JSON.parse(row["unit_payload"], symbolize_names: true) }
         end
       end
 

@@ -503,6 +503,31 @@ RSpec.describe Census::AtHome::Coordinator, :home do
       expect(store.unit(parent)[:status]).to eq("done")
     end
 
+    # A server restart mid-write once left a prefix of a proof under the
+    # digest's name, and every later delivery trusted it. Now a file is kept
+    # only if it is the whole proof, and a held file the wrong size is asked
+    # for again rather than checked.
+    it "replaces a truncated proof left under the digest's name", :checker do
+      seed_split
+      refute_the_child
+      File.binwrite(File.join(@proofs, "#{digest}.drat"), bytes[0, 3])
+
+      expect(coordinator.deliver_proof(sha256: digest, bytes:)).to include(accepted: true)
+      expect(File.binread(File.join(@proofs, "#{digest}.drat"))).to eq(bytes)
+    end
+
+    it "asks again for a held proof whose size disagrees with the claim" do
+      deferred = described_class.new(store:, proofs: @proofs, proof_policy: :every, check_on_delivery: false)
+      seed_split
+      refute_the_child
+      deferred.deliver_proof(sha256: digest, bytes:)
+      File.binwrite(File.join(@proofs, "#{digest}.drat"), bytes[0, 3])
+
+      expect(deferred.recheck(states: ["stored"])).to eq({ "asked again" => 1 })
+      expect(deferred.status[:proofs]).to eq({ "wanted" => 1 })
+      expect(File).not_to exist(File.join(@proofs, "#{digest}.drat"))
+    end
+
     # A proof that arrived while the checker was missing is kept, not lost.
     # Once the checker exists, it gets its turn, and the parent settles.
     it "rechecks held proofs from disk once the checker is available", :checker do

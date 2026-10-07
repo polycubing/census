@@ -13,7 +13,9 @@
 #   --jobs N                  drat-trims to run at once
 #                               default: 4
 #   --states LIST             which proof states to check
-#                               default: stored,refuted
+#                               default: stored, and refuted too for a
+#                               single pass (a loop would retry a refuted
+#                               proof every interval)
 #   --interval SECONDS        how long to sleep between passes, with --loop
 #                               default: 15
 #
@@ -48,7 +50,7 @@ end
 arguments = ARGV.dup
 looping = flag? arguments, '--loop'
 jobs = Integer(option(arguments, '--jobs', 4))
-states = option(arguments, '--states', 'stored,refuted').split(',')
+states = option(arguments, '--states', looping ? 'stored' : 'stored,refuted').split(',')
 interval = Integer(option(arguments, '--interval', 15))
 abort "unknown argument(s): #{arguments.join ' '}" unless arguments.empty?
 
