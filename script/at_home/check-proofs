@@ -59,7 +59,7 @@ timeout = Integer(ENV.fetch('AT_HOME_CHECK_TIMEOUT', Census::SAT::DratTrim::DEFA
 coordinator = Census::AtHome::Coordinator.new store:, proofs:, proof_policy: policy, check_timeout: timeout
 
 loop do
-  tally = coordinator.recheck states:, jobs:
+  tally = coordinator.recheck(states:, jobs:)
   puts "#{Time.now.utc.iso8601}  checked #{tally.values.sum}: #{tally.inspect}  now #{store.proof_states.inspect}" unless tally.empty? && looping
   break unless looping
 

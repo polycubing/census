@@ -75,7 +75,7 @@ if settling
   puts "settled #{closed} split unit(s)"
 end
 
-archiver = Census::AtHome::CubeArchiver.new store:, root:, shape_id: id, depth:, checker:, solver:
+archiver = Census::AtHome::CubeArchiver.new(store:, root:, shape_id: id, depth:, checker:, solver:)
 result = archiver.archive
 puts "#{id}: #{result[:leaves]} leaf proofs, manifest #{result[:manifest]}"
 puts "manifest sha256 #{result[:sha256]}"
