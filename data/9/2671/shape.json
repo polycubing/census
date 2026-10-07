@@ -12,5 +12,10 @@
   "heesch": null,
   "budgets": { "box_max_volume": 96, "torus_max_index": 48 },
   "credits": { "prior_art": null, "solved_by": "polycube-census v0.1.0", "verified_by": null },
-  "reached": { "corona_sat": 2 }
+  "reached": { "corona_sat": 2 },
+  "stages": [
+    { "outcome": "exhausted", "stage": "box", "volume": 96 },
+    { "index": 48, "outcome": "exhausted", "stage": "torus" },
+    { "depth": 2, "outcome": "witnessed", "stage": "corona" }
+  ]
 }

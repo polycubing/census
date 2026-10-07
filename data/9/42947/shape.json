@@ -22,5 +22,11 @@
   "heesch": 1,
   "budgets": { "box_max_volume": 96, "corona_depth": 2, "torus_max_index": 72 },
   "credits": { "prior_art": null, "solved_by": "polycube-census v0.1.0", "verified_by": null },
-  "reached": { "corona_refuted": 2 }
+  "reached": { "corona_refuted": 2 },
+  "stages": [
+    { "outcome": "exhausted", "stage": "box", "volume": 96 },
+    { "index": 72, "outcome": "exhausted", "stage": "torus" },
+    { "depth": 1, "outcome": "witnessed", "stage": "corona" },
+    { "depth": 2, "outcome": "refuted", "stage": "corona" }
+  ]
 }

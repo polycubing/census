@@ -16,5 +16,10 @@
     "solved_by": "polycube-census v0.1.0 (corona witnesses mirrored from 9/8214)",
     "verified_by": null
   },
-  "reached": { "corona_sat": 2 }
+  "reached": { "corona_sat": 2 },
+  "stages": [
+    { "outcome": "exhausted", "stage": "box", "volume": 96 },
+    { "index": 72, "outcome": "exhausted", "stage": "torus" },
+    { "depth": 2, "outcome": "witnessed", "stage": "corona" }
+  ]
 }

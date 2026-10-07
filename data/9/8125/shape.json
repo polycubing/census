@@ -26,5 +26,9 @@
     "prior_art": null,
     "solved_by": "polycube-census v0.1.0 (mirrored from 9/13862)",
     "verified_by": null
-  }
+  },
+  "stages": [
+    { "outcome": "exhausted", "stage": "box", "volume": 96 },
+    { "index": 54, "outcome": "certified", "stage": "torus" }
+  ]
 }

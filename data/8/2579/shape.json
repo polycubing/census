@@ -28,5 +28,8 @@
     },
     "solved_by": "polycube-census v0.1.0",
     "verified_by": null
-  }
+  },
+  "stages": [
+    { "outcome": "certified", "stage": "box", "volume": 32 }
+  ]
 }

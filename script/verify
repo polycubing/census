@@ -25,6 +25,10 @@ Dir.glob(File.join(root, "*", "*", "shape.json")).sort.each do |path|
     failures << "#{record[:id]} (achiral D2 invariant)"
   end
 
+  # Stages are derived from the other fields and stored for readers, so an
+  # array that disagrees with its own record has been edited by hand.
+  failures << "#{record[:id]} (stages)" unless record[:stages] == Census::Stages.new(record:).to_a
+
   certificate = record[:certificate]
   if certificate.nil?
     unresolved += 1

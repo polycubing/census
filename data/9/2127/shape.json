@@ -21,5 +21,11 @@
       "notes": "approximate total: kissat 4.0.4 and cadical 3 (source builds) one core each on the colo since 2026-08-12, 1,338 hours each as of 2026-10-06, no proof output; kissat on the laptop 128.4 hours, stopped 2026-08-16; three cube-and-conquer campaigns (4,096-way, 192-way, 25,920-way) through 2026-08-14, ledgers kept",
       "status": "running"
     }
+  ],
+  "stages": [
+    { "outcome": "exhausted", "stage": "box", "volume": 128 },
+    { "index": 72, "outcome": "exhausted", "stage": "torus" },
+    { "depth": 2, "outcome": "witnessed", "stage": "corona" },
+    { "depth": 3, "outcome": "attempted", "stage": "corona" }
   ]
 }

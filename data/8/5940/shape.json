@@ -25,5 +25,9 @@
     },
     "solved_by": "polycube-census v0.1.0",
     "verified_by": null
-  }
+  },
+  "stages": [
+    { "outcome": "exhausted", "stage": "box", "volume": 96 },
+    { "index": 8, "outcome": "certified", "stage": "torus" }
+  ]
 }

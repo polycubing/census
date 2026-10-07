@@ -19,5 +19,9 @@
   },
   "heesch": null,
   "budgets": { "box_max_volume": 96, "torus_max_index": 48 },
-  "credits": { "prior_art": null, "solved_by": "polycube-census v0.1.0", "verified_by": null }
+  "credits": { "prior_art": null, "solved_by": "polycube-census v0.1.0", "verified_by": null },
+  "stages": [
+    { "outcome": "exhausted", "stage": "box", "volume": 96 },
+    { "index": 21, "outcome": "certified", "stage": "torus" }
+  ]
 }

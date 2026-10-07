@@ -32,5 +32,11 @@
     "solved_by": "polycube-census v0.1.0",
     "verified_by": "Shane Becker via drat-trim (s VERIFIED) and CaDiCaL, 2026-07-07"
   },
-  "reached": { "corona_refuted": 2 }
+  "reached": { "corona_refuted": 2 },
+  "stages": [
+    { "outcome": "exhausted", "stage": "box", "volume": 128 },
+    { "index": 152, "outcome": "exhausted", "stage": "torus" },
+    { "depth": 1, "outcome": "witnessed", "stage": "corona" },
+    { "depth": 2, "outcome": "refuted", "stage": "corona" }
+  ]
 }
