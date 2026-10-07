@@ -24,10 +24,15 @@ checked = 0
 unresolved = 0
 refutation_backed = []
 computations = Hash.new(0)
+shapes = Hash.new(0)
+achiral = Hash.new(0)
 failures = []
 
 Dir.glob(File.join(root, "*", "*", "shape.json")).sort.each do |path|
   record = JSON.parse(File.read(path), symbolize_names: true)
+
+  shapes[record[:n]] += 1
+  achiral[record[:n]] += 1 if record[:chiral] == false
 
   # D2 invariant: an achiral shape's 48-isometry placement set equals its
   # 24-rotation set, so the two tiling columns can never legitimately differ.
@@ -103,7 +108,18 @@ Dir.glob(File.join(root, "*", "*", "shape.json")).sort.each do |path|
   checked += 1
 end
 
+# Burnside, with the two-element group {identity, mirror} acting on the
+# shapes of one size: mirror-identified classes = (shapes + achiral) / 2.
+# OEIS gives both counts, so the achiral tally in data/ is pinned by them.
+shapes.keys.sort.each do |n|
+  expected_shapes = Census::OEIS::A000162[n - 1]
+  expected_classes = Census::OEIS::A038119[n - 1]
+  failures << "n=#{n} (#{shapes[n]} shapes, A000162 says #{expected_shapes})" unless shapes[n] == expected_shapes
+  failures << "n=#{n} (#{achiral[n]} achiral, Burnside and A038119 say #{(2 * expected_classes) - expected_shapes})" unless shapes[n] + achiral[n] == 2 * expected_classes
+end
+
 puts "verified #{checked} certificates, #{unresolved} unresolved shapes"
+puts "shape and achiral counts through n=#{shapes.keys.max} match A000162 and A038119 by Burnside"
 if refutation_backed.any?
   puts "refutation-backed non-tilers (recheck with drat-trim against cnf/): #{refutation_backed.join(', ')}"
   summary = computations.sort.map { |kind, count| "#{count} #{kind}" }.join(", ")
