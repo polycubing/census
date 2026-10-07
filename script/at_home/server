@@ -15,6 +15,19 @@
 #   --threads THREADS         number of threads to use
 #                               default: $AT_HOME_THREADS
 #                               or:      16
+#   --proof-policy POLICY     on_request: proofs are asked for by hand, and a
+#                             parent settles on claimed digests
+#                             every: each proof is asked for as soon as it is
+#                             claimed, checked on arrival, and a parent settles
+#                             only on checked proofs
+#                               default: $AT_HOME_PROOF_POLICY
+#                               or:      on_request
+#   --max-proof-bytes N       upload cap for one proof
+#                               default: $AT_HOME_MAX_PROOF_BYTES
+#                               or:      104857600 (GitHub's blob limit)
+#   --check-timeout SECONDS   how long drat-trim may spend on one proof
+#                               default: $AT_HOME_CHECK_TIMEOUT
+#                               or:      300
 #
 # A thin wrapper over `puma -C config/puma.rb`
 # Both this and `puma` load config.ru, so you may use either to start the server.
@@ -43,8 +56,11 @@ def check_for_unknown_options arguments
 end
 
 # Extract options
-ENV['PORT']            = option arguments, '--port',    ENV.fetch('PORT', '9292')
-ENV['AT_HOME_THREADS'] = option arguments, '--threads', ENV.fetch('AT_HOME_THREADS', '16')
+ENV['PORT']                    = option arguments, '--port',            ENV.fetch('PORT', '9292')
+ENV['AT_HOME_THREADS']         = option arguments, '--threads',         ENV.fetch('AT_HOME_THREADS', '16')
+ENV['AT_HOME_PROOF_POLICY']    = option arguments, '--proof-policy',    ENV.fetch('AT_HOME_PROOF_POLICY', 'on_request')
+ENV['AT_HOME_MAX_PROOF_BYTES'] = option arguments, '--max-proof-bytes', ENV.fetch('AT_HOME_MAX_PROOF_BYTES', (100 * 1024 * 1024).to_s)
+ENV['AT_HOME_CHECK_TIMEOUT']   = option arguments, '--check-timeout',   ENV.fetch('AT_HOME_CHECK_TIMEOUT', '300')
 
 # Check options
 check_for_unknown_options arguments

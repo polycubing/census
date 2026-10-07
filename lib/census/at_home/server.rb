@@ -116,8 +116,8 @@ module Census
         digest = params[:sha256].to_s
         halt(BAD_REQUEST, json(error: "malformed digest")) unless digest.match?(Coordinator::DIGEST)
 
-        bytes = request.body.read(Coordinator::MAX_PROOF_BYTES + 1).to_s
-        halt(PAYLOAD_TOO_LARGE, json(error: "proof too large")) if bytes.bytesize > Coordinator::MAX_PROOF_BYTES
+        bytes = request.body.read(coordinator.max_proof_bytes + 1).to_s
+        halt(PAYLOAD_TOO_LARGE, json(error: "proof too large")) if bytes.bytesize > coordinator.max_proof_bytes
 
         json(coordinator.deliver_proof(sha256: digest, bytes:))
       end
@@ -168,7 +168,7 @@ module Census
 
       # JSON bodies stay small. A proof is the one thing allowed to be big, and
       # only because it cannot be anything else.
-      def body_cap = request.path.start_with?("/proof") ? Coordinator::MAX_PROOF_BYTES : MAX_BODY_BYTES
+      def body_cap = request.path.start_with?("/proof") ? coordinator.max_proof_bytes : MAX_BODY_BYTES
 
       def parse_body
         raw = request.body.read(MAX_BODY_BYTES + 1).to_s

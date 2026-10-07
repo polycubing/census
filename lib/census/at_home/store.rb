@@ -197,7 +197,7 @@ module Census
       def wanted_proof(sha256)
         row = synchronize do |connection|
           connection.exec_params(<<~SQL, [sha256]).first
-            SELECT results.id, results.proof_bytes, units.payload AS unit_payload
+            SELECT results.id, results.proof_bytes, results.unit_id, units.payload AS unit_payload
               FROM results JOIN units ON units.id = results.unit_id
              WHERE results.proof_sha256 = $1 AND results.proof_state = 'wanted'
              LIMIT 1
@@ -207,6 +207,7 @@ module Census
 
         { id: Integer(row["id"]),
           bytes: row["proof_bytes"] && Integer(row["proof_bytes"]),
+          unit_id: Integer(row["unit_id"]),
           unit: JSON.parse(row["unit_payload"], symbolize_names: true) }
       end
 
@@ -239,16 +240,18 @@ module Census
 
       # Whether every child of a split is refuted.
       #
-      # A child counts only with a verified `unsat` against it. A child that
-      # came back `sat` does not merely fail to refute its parent, it settles
-      # the parent the other way, so "all refuted" must never be inferred from
+      # A child counts only with a verified `unsat` against it, and when proofs
+      # are required, only once its proof has been checked. A child that came
+      # back `sat` does not merely fail to refute its parent, it settles the
+      # parent the other way, so "all refuted" must never be inferred from
       # "all finished".
-      def children_all_refuted?(parent_id)
+      def children_all_refuted?(parent_id, proofs_required: false)
         row = synchronize do |connection|
-          connection.exec_params(<<~SQL, [parent_id]).first
+          connection.exec_params(<<~SQL, [parent_id, proofs_required]).first
             SELECT count(DISTINCT units.id) AS children,
                    count(DISTINCT units.id) FILTER (
                      WHERE results.verdict = 'unsat' AND results.verified IS TRUE
+                       AND ($2 IS FALSE OR results.proof_state = 'verified')
                    ) AS refuted
               FROM units LEFT JOIN results ON results.unit_id = units.id
              WHERE units.parent_id = $1

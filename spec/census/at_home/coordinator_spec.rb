@@ -366,4 +366,70 @@ RSpec.describe Census::AtHome::Coordinator, :home do
       expect(coordinator.want_proof(digest)).to be(false)
     end
   end
+
+  # A proof-backed theorem needs every proof, checked, before anything rests
+  # on it. This policy makes the coordinator ask without being told to, and
+  # withholds the parent until the checker has spoken.
+  describe "wanting every proof" do
+    let(:contradiction) { "spec/fixtures/proof/contradiction.cnf" }
+    let(:bytes)         { File.binread("spec/fixtures/proof/contradiction.drat") }
+    let(:digest)        { Digest::SHA256.hexdigest(bytes) }
+
+    around { |example| Dir.mktmpdir { |dir| @proofs = dir and example.run } }
+
+    let(:coordinator) { described_class.new(store:, proofs: @proofs, proof_policy: :every) }
+
+    # A split cube with one child, the way seed-cubes lays a cover down.
+    def seed_split
+      parent = store.add_unit(kind: "cube", shape_id: "8/1309", payload: { cnf_path: contradiction, cube: [] })
+      store.close_unit(id: parent, status: "split")
+      store.add_unit(kind: "cube", shape_id: "8/1309", parent_id: parent, payload: { cnf_path: contradiction, cube: [1] })
+      parent
+    end
+
+    def refute_the_child
+      worker = coordinator.register(handle: "spec")
+      unit = coordinator.lease(client_id: worker[:id])
+      coordinator.submit(unit_id: unit[:id], client_id: worker[:id], verdict: "unsat",
+                         payload: { cube: [1], proof: { sha256: digest, bytes: bytes.bytesize } })
+      worker
+    end
+
+    it "asks for a refutation's proof the moment it is claimed" do
+      seed_split
+      worker = refute_the_child
+
+      expect(coordinator.wanted_proofs(client_id: worker[:id])).to eq([digest])
+      expect(coordinator.status[:proofs]).to eq({ "wanted" => 1 })
+    end
+
+    it "does not settle a parent on a proof nobody has checked" do
+      parent = seed_split
+      refute_the_child
+
+      expect(store.unit(parent)[:status]).to eq("split")
+    end
+
+    it "settles the parent once the proof is delivered and checked", :checker do
+      parent = seed_split
+      refute_the_child
+
+      answer = coordinator.deliver_proof(sha256: digest, bytes:)
+
+      expect(answer[:note]).to match(/verified.*settled unit #{parent}/)
+      expect(store.unit(parent)[:status]).to eq("done")
+    end
+
+    it "takes a proof over the default cap when the campaign allows it" do
+      big = described_class.new(store:, proofs: @proofs, proof_policy: :every, max_proof_bytes: 4)
+      seed_split
+      refute_the_child
+
+      expect(big.deliver_proof(sha256: digest, bytes:)).to include(accepted: false, note: /4 byte cap/)
+    end
+
+    it "rejects a policy it does not know" do
+      expect { described_class.new(store:, proof_policy: :sometimes) }.to raise_error(ArgumentError)
+    end
+  end
 end

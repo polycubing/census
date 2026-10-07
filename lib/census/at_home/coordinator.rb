@@ -16,20 +16,37 @@ module Census
       # A SHA-256, lowercase hex. Anything else did not come from hashing a file.
       DIGEST = /\A[0-9a-f]{64}\z/
 
-      # The ceiling on a proof we will take by upload. GitHub refuses blobs past
-      # 100 MB, so anything larger could not join the archive even if checked.
-      # The triskelion campaign's proofs run far past this, and they need the S3
-      # path rather than this one. A record saying "too large to check this way"
-      # is worth more than silence about it.
+      # The default ceiling on a proof we will take by upload. GitHub refuses
+      # blobs past 100 MB, so anything larger could not join the archive even
+      # if checked. A campaign whose proofs are bound for S3 rather than git
+      # raises it. A record saying "too large to check this way" is worth more
+      # than silence about it.
       MAX_PROOF_BYTES = 100 * 1024 * 1024
 
       DEFAULT_PROOFS = "proofs"
 
-      def initialize(store:, lease_seconds: 900, proofs: DEFAULT_PROOFS)
+      # Which claimed proofs get asked for. `on_request` leaves it to a human
+      # (script/at_home/audit) and lets a parent settle on claimed digests.
+      # `every` asks for each proof the moment it is claimed and lets a parent
+      # settle only on checked ones, which is what a proof-backed theorem
+      # needs.
+      PROOF_POLICIES = %i[on_request every].freeze
+
+      attr_reader :max_proof_bytes, :proof_policy
+
+      def initialize(store:, lease_seconds: 900, proofs: DEFAULT_PROOFS, proof_policy: :on_request,
+                     max_proof_bytes: MAX_PROOF_BYTES, check_timeout: SAT::DratTrim::DEFAULT_TIMEOUT)
+        raise ArgumentError, "proof_policy must be one of #{PROOF_POLICIES.inspect}" unless PROOF_POLICIES.include?(proof_policy)
+
         @store = store
         @lease_seconds = lease_seconds
         @proofs = proofs
+        @proof_policy = proof_policy
+        @max_proof_bytes = max_proof_bytes
+        @check_timeout = check_timeout
       end
+
+      def every_proof? = proof_policy == :every
 
       def register(handle:, display_name: nil, contact: nil) = store.register_client(handle:, display_name:, contact:)
 
@@ -66,6 +83,7 @@ module Census
         proof = accepted ? payload[:proof] : nil
         store.record_result(unit_id:, client_id:, verdict:, payload:, seconds:, verified: accepted, note:,
                             proof:, proof_state: proof ? "claimed" : "none")
+        store.want_proof(proof[:sha256]) if proof && every_proof?
         store.credit_client(id: client_id, accepted:)
 
         unless accepted
@@ -100,9 +118,9 @@ module Census
         wanted = store.wanted_proof(sha256)
         return refusal("no proof was asked for with that digest") unless wanted
 
-        if bytes.bytesize > MAX_PROOF_BYTES
+        if bytes.bytesize > max_proof_bytes
           store.record_proof(id: wanted[:id], state: "too_large", note: "#{bytes.bytesize} bytes exceeds the upload cap")
-          return refusal("proof exceeds the #{MAX_PROOF_BYTES} byte cap")
+          return refusal("proof exceeds the #{max_proof_bytes} byte cap")
         end
 
         digest = Digest::SHA256.hexdigest(bytes)
@@ -113,7 +131,7 @@ module Census
 
       private
 
-      attr_reader :lease_seconds, :proofs, :store
+      attr_reader :check_timeout, :lease_seconds, :proofs, :store
 
       def refusal(note) = { accepted: false, note: }
 
@@ -166,7 +184,7 @@ module Census
       # a result would mean inventing a worker who produced it.
       def roll_up(unit)
         parent_id = unit[:parent_id]
-        return nil unless parent_id && store.children_all_refuted?(parent_id)
+        return nil unless parent_id && store.children_all_refuted?(parent_id, proofs_required: every_proof?)
 
         store.close_unit(id: parent_id, status: "done")
         parent = store.unit(parent_id)
@@ -188,13 +206,17 @@ module Census
         result = Tempfile.create(["census-cube", ".cnf"]) do |formula|
           SAT::CubeFile.stream_augmented(cnf_path: unit.fetch(:cnf_path), cube: unit.fetch(:cube, []), io: formula)
           formula.flush
-          SAT::DratTrim.check(cnf_path: formula.path, proof_path: path)
+          SAT::DratTrim.check(cnf_path: formula.path, proof_path: path, timeout: check_timeout)
         end
 
         state = result.verified? ? "verified" : "refuted"
         store.record_proof(id: wanted[:id], state:, path:, note: result.summary)
+        note = "proof #{state}: #{result.summary}"
 
-        { accepted: result.verified?, note: "proof #{state}: #{result.summary}" }
+        # A checked proof may be the last one a parent was waiting on.
+        rolled = roll_up(store.unit(wanted[:unit_id])) if result.verified? && every_proof?
+
+        { accepted: result.verified?, note: rolled ? "#{note}, and it settled #{rolled}" : note }
       rescue SAT::DratTrim::Missing, KeyError => error
         # Could not check is not the same answer as did not hold.
         store.record_proof(id: wanted[:id], state: "stored", path:, note: "unchecked: #{error.message}")
