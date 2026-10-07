@@ -21,6 +21,7 @@
 #   script/at_home/drain-proofs x1.lab47.dev ~/Developer/polycubing/proofs-42947
 
 require "fileutils"
+require "shellwords"
 require "tempfile"
 
 arguments = ARGV.dup
@@ -28,20 +29,28 @@ dry_running = arguments.delete("--dry-run")
 host, destination = arguments
 abort "usage: script/at_home/drain-proofs <host> <destination> [--dry-run]" if host.nil? || destination.nil?
 
+# A login shell, so the coordinator machine's own PATH and PGHOST apply.
+# Escaped twice: once for the shell here that runs ssh, once for the shell
+# there that ssh hands the line to.
+def remote(host, command) = `ssh #{host} #{Shellwords.escape("bash -lc #{Shellwords.escape(command)}")}`
+
 query = "select proof_path from results where proof_state = 'verified' and proof_path is not null"
-paths = `ssh #{host} "psql -tA polycube_at_home -c \\"#{query}\\""`.lines.map(&:strip).reject(&:empty?)
+paths = remote(host, "psql -tA polycube_at_home -c \"#{query}\"").lines.map(&:strip).reject(&:empty?)
 abort "could not list verified proofs on #{host}" unless $?.success? # rubocop:disable Style/SpecialGlobalVars
 
-# Only files the remote disk still has: a path drained earlier is already here.
-remaining = `ssh #{host} "ls -1 #{paths.map { "'#{it}'" }.join(' ')} 2>/dev/null"`.lines.map(&:strip)
-puts "#{paths.size} verified proofs, #{remaining.size} still on #{host}"
-exit if remaining.empty? || dry_running
+puts "#{paths.size} verified proofs on record"
+exit if paths.empty?
 
+# rsync skips the paths drained on an earlier run (--ignore-missing-args) and
+# says how many it moved this time.
 FileUtils.mkdir_p(destination)
 Tempfile.create("drain") do |list|
-  list.puts(remaining)
+  list.puts(paths)
   list.flush
-  system("rsync", "-a", "--files-from=#{list.path}", "--no-relative", "--remove-source-files", "--info=progress2",
-         "#{host}:/", destination, exception: true)
+  command = ["rsync", "-a", "--files-from=#{list.path}", "--no-relative", "--ignore-missing-args", "--remove-source-files", "--stats"]
+  command << "--dry-run" if dry_running
+  output = IO.popen(command + ["#{host}:/", destination], &:read)
+  abort "rsync failed:\n#{output}" unless $?.success? # rubocop:disable Style/SpecialGlobalVars
+  moved = output[/Number of regular files transferred: ([\d,]+)/, 1] || "0"
+  puts "#{dry_running ? 'would drain' : 'drained'} #{moved} proofs into #{destination}, #{`du -sh #{destination}`.split.first} there now"
 end
-puts "drained #{remaining.size} proofs into #{destination}, #{`du -sh #{destination}`.split.first} there now"
