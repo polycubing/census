@@ -24,6 +24,17 @@
       "sha256": "f496c5bccd0ca36d09cff46703d08daceef3fc2958854546369cc19d6a086780",
       "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/2127/corona2.cnf.xz"
     },
+    "9/2127/cnf/corona3.cnf": {
+      "bytes": 3894903552,
+      "compressed": {
+        "bytes": 81767732,
+        "sha256": "92961f2d06b9a00e2c55038919b969b7a217ea9cf8d918fab2fbbdd6484a0e17"
+      },
+      "description": "formula for corona-3 of 9/2127",
+      "published": "2026-10-06",
+      "sha256": "db66d87f6856fbec7b1029a0de30925a49c80e103fa626740aeb76913ca1ea9d",
+      "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/2127/corona3.cnf.xz"
+    },
     "9/24025/cnf/corona2.cnf": {
       "bytes": 652271165,
       "compressed": {
@@ -45,6 +56,17 @@
       "published": "2026-10-06",
       "sha256": "3757ad11cde57a375fc923d55c2f250544f1afc94f1ccdd08e76e22874725b1c",
       "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/2650/corona2.cnf.xz"
+    },
+    "9/2671/cnf/corona2.cnf": {
+      "bytes": 690999165,
+      "compressed": {
+        "bytes": 16458016,
+        "sha256": "ccd1edf263d204c0a16dd18b83c80902f8d3e3babb190444a362c6b81080f0f4"
+      },
+      "description": "formula for corona-2 of 9/2671",
+      "published": "2026-10-06",
+      "sha256": "26b847b3c4680c25e13cdaa2ecc94d3714c2f9cc2ec057c018b3eef9a7d5273b",
+      "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/2671/corona2.cnf.xz"
     },
     "9/42947/cnf/corona2.cnf": {
       "bytes": 65343391,
@@ -100,6 +122,17 @@
       "published": "2026-10-06",
       "sha256": "63e1b36a0064f2a154cfc0114d4b2fc3aeb96694a8a82099eb88a3f9933c8420",
       "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/8219/corona2.cnf.xz"
+    },
+    "9/8219/cnf/corona2.drat": {
+      "bytes": 7272643710,
+      "compressed": {
+        "bytes": 671830044,
+        "sha256": "7f2c883ebdd197dbcf8774a3cc454f0fea2dbda393b82e103fa039467360f94b"
+      },
+      "description": "DRAT refutation of corona-2 of 9/8219",
+      "published": "2026-10-06",
+      "sha256": "3cc41ade5700f4c1b0f258b9cb3b8d3af8c4a3d2c5ffe688e3f52c3241a44106",
+      "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/8219/corona2.drat.xz"
     }
   }
 }
