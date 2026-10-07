@@ -25,6 +25,10 @@ RSpec.describe Census::Artifact do
     it "names a CNF as the formula for that corona depth" do
       expect(artifact("9/2127/cnf/corona3.cnf").description).to eq("formula for corona-3 of 9/2127")
     end
+
+    it "names a tar as the bundle of cube proofs for that corona depth" do
+      expect(artifact("9/42947/cnf/corona2.proofs.tar").description).to eq("bundle of the cube proofs refuting corona-2 of 9/42947")
+    end
   end
 
   describe "#sha256 and #bytes" do

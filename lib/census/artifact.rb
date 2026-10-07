@@ -33,6 +33,7 @@ module Census
       case File.extname(name)
       when ".drat" then "DRAT refutation of corona-#{depth} of #{id}"
       when ".cnf"  then "formula for corona-#{depth} of #{id}"
+      when ".tar"  then "bundle of the cube proofs refuting corona-#{depth} of #{id}"
       else name
       end
     end

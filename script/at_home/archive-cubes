@@ -1,0 +1,95 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Turn a finished cube campaign into the record's claim.
+#
+# Usage:
+#   script/at_home/archive-cubes <id> [options]
+#
+# Options.
+#
+#   --depth K                 which corona the campaign refuted
+#                               default: the record's reached.corona_refuted
+#   --settle                  first close any splits a missed roll-up left
+#                             open, then archive
+#                               default: archive only
+#   --bundle DIR              also tar every leaf's proof from DIR (the
+#                             coordinator's proofs directory) into
+#                             data/<id>/cnf/corona<K>.proofs.tar, for
+#                             script/publish-artifacts to compress and upload
+#                               default: no bundle
+#
+# Writes data/<id>/cnf/corona<K>.proofs.json, one line per leaf cube with its
+# proof's digest, and stamps the record (and a mirror twin that derives from
+# it) with refutation_kind cube_proofs and the manifest's digest. Refuses
+# unless the shape unit is done, which the roll-up grants only when every
+# leaf's proof was checked. Commit the result by hand.
+#
+# Example, the triskelion, on the coordinator's machine:
+#
+#   script/at_home/archive-cubes 9/42947 --settle --bundle ~/proofs-42947
+
+require_relative '../../lib/census'
+
+def option arguments, flag, default
+  position = arguments.index flag
+  return default if position.nil?
+
+  arguments.slice!(position, 2).last
+end
+
+def flag? arguments, flag
+  position = arguments.index flag
+  return false if position.nil?
+
+  arguments.delete_at position
+
+  true
+end
+
+arguments = ARGV.dup
+settling = flag? arguments, '--settle'
+bundle = option arguments, '--bundle', nil
+depth = option arguments, '--depth', nil
+unknown = arguments.select { it.start_with? '--' }
+abort "unknown option(s): #{unknown.join ' '}" unless unknown.empty?
+
+id = arguments.shift
+abort 'usage: script/at_home/archive-cubes <id> [--depth K] [--settle] [--bundle DIR]' if id.nil? || !arguments.empty?
+
+root = File.expand_path '../../data', __dir__
+record = JSON.parse File.read(File.join(root, id, 'shape.json')), symbolize_names: true
+depth = Integer(depth || record.dig(:reached, :corona_refuted) || abort("no depth known for #{id}, pass --depth"))
+
+vendor = File.expand_path '../../vendor/drat-trim', __dir__
+commit = `git -C #{vendor} rev-parse --short HEAD 2>/dev/null`.strip
+checker = commit.empty? ? 'drat-trim (version unrecorded)' : "drat-trim #{commit}"
+solver = "kissat #{`kissat --version`.strip}"
+
+store = Census::AtHome::Store.new
+policy = ENV.fetch('AT_HOME_PROOF_POLICY', 'every').to_sym
+coordinator = Census::AtHome::Coordinator.new store:, proof_policy: policy
+
+if settling
+  closed = coordinator.settle shape_id: id
+  puts "settled #{closed} split unit(s)"
+end
+
+archiver = Census::AtHome::CubeArchiver.new store:, root:, shape_id: id, depth:, checker:, solver:
+result = archiver.archive
+puts "#{id}: #{result[:leaves]} leaf proofs, manifest #{result[:manifest]}"
+puts "manifest sha256 #{result[:sha256]}"
+puts "twin #{result[:twin]} restamped" if result[:twin]
+
+if bundle
+  leaves = store.cube_leaves shape_id: id
+  list = File.join root, id, 'cnf', "corona#{depth}.proofs.list"
+  File.write list, leaves.map { "#{it[:proof_sha256]}.drat\n" }.join
+  tarball = File.join root, id, 'cnf', "corona#{depth}.proofs.tar"
+  puts "bundling #{leaves.size} proofs from #{bundle} into #{tarball}"
+  system 'tar', '--create', '--file', tarball, '--directory', bundle, '--files-from', list, exception: true
+  File.delete list
+  puts "bundle: #{File.size tarball} bytes, sha256 #{Digest::SHA256.file(tarball).hexdigest}"
+end
+
+store.close

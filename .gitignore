@@ -25,5 +25,8 @@ data/9/8214/cnf/
 data/9/24830/cnf/
 
 # The triskelion's cube ledgers are small and are the whole evidence behind
-# two theorems, so they live in git. The 62 MB formula beside them does not.
+# two theorems, so they live in git, as does the manifest of checked cube
+# proofs once the @home campaign writes it. The 62 MB formula and the proof
+# bundle beside them do not.
 !data/9/42947/cnf/ledgers/
+!data/9/42947/cnf/corona2.proofs.json

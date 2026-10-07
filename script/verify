@@ -60,12 +60,25 @@ Dir.glob(File.join(root, "*", "*", "shape.json")).sort.each do |path|
     # hold the same evidence and must have computed it.
     kind = certificate[:refutation_kind]
     provenance = certificate[:provenance]
-    failures << "#{record[:id]} (refutation_kind #{kind.inspect})" unless %w[ledger proof].include?(kind)
+    failures << "#{record[:id]} (refutation_kind #{kind.inspect})" unless %w[cube_proofs ledger proof].include?(kind)
     failures << "#{record[:id]} (provenance #{provenance.inspect})" unless %w[computed derived].include?(provenance)
     failures << "#{record[:id]} (proof without sha256)" if kind == "proof" && certificate[:refutation_sha256].nil?
     if provenance == "computed"
       computations[kind] += 1
       failures << "#{record[:id]} (computed yet derived_from)" unless certificate[:derived_from].nil?
+
+      # A cube campaign's claim is its manifest of checked proofs, which lives
+      # in git beside the record and must hash to what the record names.
+      if kind == "cube_proofs"
+        manifest_path = File.join(root, record[:id], certificate[:refutation].to_s)
+        if File.exist?(manifest_path)
+          failures << "#{record[:id]} (proofs manifest sha256)" unless Digest::SHA256.file(manifest_path).hexdigest == certificate[:refutation_sha256]
+          proofs = JSON.parse(File.read(manifest_path), symbolize_names: true)
+          failures << "#{record[:id]} (proofs manifest count)" unless proofs[:leaves].size == proofs[:proofs] && proofs[:proofs] == certificate.dig(:checked, :proofs)
+        else
+          failures << "#{record[:id]} (proofs manifest missing)"
+        end
+      end
 
       # The manifest's raw checksum for a published proof must be the one the
       # record names, or the bucket holds some other bytes than the claim.
