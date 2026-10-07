@@ -11,9 +11,9 @@
   "certificate": {
     "adjacency": "26",
     "heesch": 1,
-    "refutation": "cube-and-conquer ledgers (colo): c42947-cubes/blade/blade2 .results.jsonl",
+    "refutation": "cnf/ledgers/c42947-{cubes,blade,blade2}.icnf.results.jsonl",
     "refutation_sha256": null,
-    "solved_with": "cube-and-conquer on kissat 4.0.4 (colo, 50 cores): 4096 sign-cubes + 475 clause-branch + 8225 clause-branch cubes, 12861 ledger entries, all UNSAT, zero SATISFIABLE; ledger-backed, per-cube DRAT campaign pending",
+    "solved_with": "cube-and-conquer on kissat 4.0.4 (colo, 50 cores): 4096 sign-cubes + 475 clause-branch + 8225 clause-branch cubes, 12868 ledger entries, 12615 refutations, zero SATISFIABLE; cover verified by script/audit-cubes 2026-10-06; ledger-backed, per-cube DRAT campaign pending",
     "type": "heesch"
   },
   "heesch": 1,

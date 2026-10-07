@@ -1,0 +1,59 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Audit a cube-and-conquer campaign: do its ledgers actually close the formula?
+#
+# Usage: script/audit-cubes <level1.icnf> [<level2.icnf> ...]
+#
+# Each level is a cube file whose ledger, <file>.results.jsonl, was written by
+# script/cube-solve. Level 1 must be a complete sign cover of the formula. A
+# cube left standing at one level, with no refutation, must be partitioned by
+# the cubes of the next level, and the last level must leave nothing standing.
+# Cubes whose parent was refuted anyway are ignored, since nothing rests on
+# them. A SATISFIABLE verdict anywhere fails the audit: that is a witness,
+# not a refutation. Exits nonzero unless every region is closed.
+#
+# Example, the triskelion:
+#
+#   script/audit-cubes data/9/42947/cnf/ledgers/c42947-{cubes,blade,blade2}.icnf
+
+require_relative "../lib/census"
+
+paths = ARGV
+abort "usage: script/audit-cubes <level1.icnf> [<level2.icnf> ...]" if paths.empty?
+
+levels = paths.map do |path|
+  cubes = Census::SAT::CubeFile.new(path:).cubes
+  cover = Census::SAT::CubeCover.new(cubes:)
+  ledger = Census::SAT::CubeLedger.new(path: "#{path}.results.jsonl")
+  { cover:, cubes:, ledger:, path: }
+end
+
+failures = []
+standing = []
+
+levels.each_with_index do |level, position|
+  cover, cubes, ledger, path = level.values_at(:cover, :cubes, :ledger, :path)
+  failures << "#{path}: SATISFIABLE cube(s) #{ledger.satisfied.inspect}" unless ledger.satisfied.empty?
+
+  pending = ledger.pending(count: cubes.size).map { cubes[it] }
+  if position.zero?
+    failures << "#{path}: not a complete sign cover of the formula" unless cover.complete?
+  else
+    unpartitioned = standing.reject { cover.partitions?(it) }
+    failures << "#{path}: #{unpartitioned.size} standing cube(s) from the previous level not partitioned" unless unpartitioned.empty?
+    pending = pending.select { |cube| standing.any? { |parent| (parent - cube).empty? } }
+  end
+
+  puts format("%-56s %6d cubes %6d refuted %5d standing", path, cubes.size, ledger.refuted.size, pending.size)
+  standing = pending
+end
+
+failures << "#{levels.last[:path]}: #{standing.size} cube(s) still standing" unless standing.empty?
+
+if failures.empty?
+  puts "closed: every region refuted across #{levels.size} level(s)"
+else
+  failures.each { puts "FAIL #{it}" }
+  exit 1
+end
