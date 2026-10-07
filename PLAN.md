@@ -208,7 +208,7 @@ The census will outlive any one person's accounts, so identity decisions are mad
 
 Shape ids _are_ paths — `9/2127` is already the citable name in `data/`, in the paper, and in conversation, so it addresses the page too. Never prefix it (`/shapes/9/2127`), never renumber.
 
-```
+```txt
 /                      the census: what it is, the scoreboard
 /8                     octacubes index (per-n indexes, bare number)
 /9/2127                shape permalink — the id is the path
