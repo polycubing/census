@@ -60,7 +60,10 @@ propagated = 0
           type: "heesch",
           heesch: twin_record[:heesch],
           adjacency: twin_record.dig(:certificate, :adjacency) || "26",
+          derived_from: twin_record[:id],
+          provenance: "derived",
           refutation: "mirror of #{twin_record[:id]} — data/#{twin_record[:id]}/#{twin_record.dig(:certificate, :refutation)}",
+          refutation_kind: twin_record.dig(:certificate, :refutation_kind),
           refutation_sha256: twin_record.dig(:certificate, :refutation_sha256),
           solved_with: "witnesses and verdict mirrored from #{twin_record[:id]}"
         },

@@ -10,8 +10,11 @@
   "tiles_with_reflections": false,
   "certificate": {
     "adjacency": "26",
+    "derived_from": null,
     "heesch": 1,
+    "provenance": "computed",
     "refutation": "cnf/corona2.drat",
+    "refutation_kind": "proof",
     "refutation_sha256": "65dc6a556a659fd908f380ed4e366bae589c1e97a4c7c43bb69bcf80f44bb380",
     "solved_with": "kissat 4.0.4; drat-trim VERIFIED (trimmed core)",
     "type": "heesch"

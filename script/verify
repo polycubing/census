@@ -13,6 +13,7 @@ root = File.expand_path("../data", __dir__)
 checked = 0
 unresolved = 0
 refutation_backed = []
+computations = Hash.new(0)
 failures = []
 
 Dir.glob(File.join(root, "*", "*", "shape.json")).sort.each do |path|
@@ -34,6 +35,29 @@ Dir.glob(File.join(root, "*", "*", "shape.json")).sort.each do |path|
 
   if certificate[:type] == "heesch"
     refutation_backed << record[:id]
+
+    # Provenance: every refutation names its kind and whether this record did
+    # the computing. A derived record leans on its mirror twin, which must
+    # hold the same evidence and must have computed it.
+    kind = certificate[:refutation_kind]
+    provenance = certificate[:provenance]
+    failures << "#{record[:id]} (refutation_kind #{kind.inspect})" unless %w[ledger proof].include?(kind)
+    failures << "#{record[:id]} (provenance #{provenance.inspect})" unless %w[computed derived].include?(provenance)
+    failures << "#{record[:id]} (proof without sha256)" if kind == "proof" && certificate[:refutation_sha256].nil?
+    if provenance == "computed"
+      computations[kind] += 1
+      failures << "#{record[:id]} (computed yet derived_from)" unless certificate[:derived_from].nil?
+    else
+      source_path = File.join(root, certificate[:derived_from].to_s, "shape.json")
+      source = File.exist?(source_path) ? JSON.parse(File.read(source_path), symbolize_names: true) : {}
+      sound = certificate[:derived_from] == record[:mirror_id] &&
+              source.dig(:certificate, :provenance) == "computed" &&
+              source.dig(:certificate, :refutation_kind) == kind &&
+              source.dig(:certificate, :refutation_sha256) == certificate[:refutation_sha256] &&
+              source[:heesch] == record[:heesch]
+      failures << "#{record[:id]} (derived from #{certificate[:derived_from]})" unless sound
+    end
+
     witness_path = File.join(File.dirname(path), "corona1.json")
     if File.exist?(witness_path)
       placements = JSON.parse(File.read(witness_path), symbolize_names: true)
@@ -51,5 +75,7 @@ end
 puts "verified #{checked} certificates, #{unresolved} unresolved shapes"
 if refutation_backed.any?
   puts "refutation-backed non-tilers (recheck with drat-trim against cnf/): #{refutation_backed.join(', ')}"
+  summary = computations.sort.map { |kind, count| "#{count} #{kind}" }.join(", ")
+  puts "resting on #{computations.values.sum} independent computations (#{summary}), the rest derived by mirror"
 end
 abort "FAILED: #{failures.join(', ')}" if failures.any?

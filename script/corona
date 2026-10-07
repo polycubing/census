@@ -48,7 +48,10 @@ else
       type: "heesch",
       heesch: depth - 1,
       adjacency: "26",
+      derived_from: nil,
+      provenance: "computed",
       refutation: "cnf/corona#{depth}.drat",
+      refutation_kind: "proof",
       refutation_sha256: Digest::SHA256.file(proof_path).hexdigest,
       solved_with: "kissat #{`kissat --version`.strip}"
     },

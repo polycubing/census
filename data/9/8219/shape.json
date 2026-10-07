@@ -10,8 +10,11 @@
   "tiles_with_reflections": false,
   "certificate": {
     "adjacency": "26",
+    "derived_from": null,
     "heesch": 1,
+    "provenance": "computed",
     "refutation": "cnf/corona2.drat",
+    "refutation_kind": "proof",
     "refutation_sha256": "3cc41ade5700f4c1b0f258b9cb3b8d3af8c4a3d2c5ffe688e3f52c3241a44106",
     "solved_with": "kissat 4.0.4; proof is the drat-trim-verified core of the original 21 GB run (8.4 h audit)",
     "type": "heesch"

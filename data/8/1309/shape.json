@@ -10,8 +10,11 @@
   "tiles_with_reflections": false,
   "certificate": {
     "adjacency": "26",
+    "derived_from": null,
     "heesch": 1,
+    "provenance": "computed",
     "refutation": "cnf/corona2.drat",
+    "refutation_kind": "proof",
     "refutation_sha256": "621091ca6f4695ee65ecf1d3fc7c205b35402330a1a78fd499fbb628a737dc1f",
     "solved_with": "kissat (version unrecorded, 2026-07); corona-2 UNSAT reproduced by CaDiCaL; drat-trim VERIFIED",
     "type": "heesch"

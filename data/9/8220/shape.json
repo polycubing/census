@@ -10,8 +10,11 @@
   "tiles_with_reflections": false,
   "certificate": {
     "adjacency": "26",
+    "derived_from": "9/8219",
     "heesch": 1,
+    "provenance": "derived",
     "refutation": "mirror of 9/8219 — data/9/8219/cnf/corona2.drat",
+    "refutation_kind": "proof",
     "refutation_sha256": "3cc41ade5700f4c1b0f258b9cb3b8d3af8c4a3d2c5ffe688e3f52c3241a44106",
     "solved_with": "witnesses and verdict mirrored from 9/8219; refutation file is 9/8219's",
     "type": "heesch"

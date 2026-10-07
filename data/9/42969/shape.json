@@ -10,8 +10,11 @@
   "tiles_with_reflections": false,
   "certificate": {
     "adjacency": "26",
+    "derived_from": "9/42947",
     "heesch": 1,
+    "provenance": "derived",
     "refutation": "mirror of 9/42947 — a tiling of this shape would reflect to a tiling of 9/42947, which its corona-2 refutation forbids",
+    "refutation_kind": "ledger",
     "refutation_sha256": null,
     "solved_with": "witness and verdict mirrored from 9/42947; cube-and-conquer on kissat 4.0.4 (colo, 50 cores): 4096 sign-cubes + 475 clause-branch + 8225 clause-branch cubes, 12868 ledger entries, 12615 refutations, zero SATISFIABLE; cover verified by script/audit-cubes 2026-10-06; ledger-backed, per-cube DRAT campaign pending",
     "type": "heesch"
