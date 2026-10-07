@@ -8,6 +8,10 @@ proofs/
 vendor/
 whitepapers--readlater/
 
+# Compressed copies of artifacts, written beside the originals by
+# script/publish-artifacts on their way to S3. The manifest tracks them.
+data/**/*.xz
+
 # SAT artifacts over GitHub's 100 MB cap — destined for S3, linked from .md files
 data/9/2127/cnf/
 data/9/8219/cnf/

@@ -1,0 +1,86 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Publish SAT artifacts too big for git to S3, and record them in the manifest.
+#
+# Usage: script/publish-artifacts <path>... [--dry-run]
+#
+# For each path under data/: compress it beside itself with xz (skipped when
+# <path>.xz already exists and is newer), hash both raw and compressed bytes,
+# upload the .xz to s3://polycubes/public/<id>/<name>.xz (skipped when an
+# object of that size is already there), and write the entry to
+# data/artifacts.json. The manifest is the git-tracked truth. The bucket is
+# storage. Safe to interrupt and repeat.
+#
+# A stranger checks a refutation with: download formula and proof, xz -d both,
+# compare sha256 to the manifest, drat-trim formula proof.
+#
+# Needs the AWS CLI signed in (aws login) with write access to the bucket.
+# Only the laptop does this. No credentials on borrowed machines.
+
+require "date"
+require_relative "../lib/census"
+
+BUCKET = "polycubes"
+REGION = "us-west-2"
+
+dry_running = ARGV.delete("--dry-run")
+abort "usage: script/publish-artifacts <path>... [--dry-run]" if ARGV.empty?
+
+root = File.expand_path("../data", __dir__)
+manifest_path = File.join(root, "artifacts.json")
+manifest = if File.exist?(manifest_path)
+             JSON.parse(File.read(manifest_path), symbolize_names: true)
+           else
+             { bucket: BUCKET, region: REGION, artifacts: {} }
+           end
+
+def compress(path)
+  compressed = "#{path}.xz"
+  return compressed if File.exist?(compressed) && File.mtime(compressed) >= File.mtime(path)
+
+  puts "  xz: #{File.size(path)} bytes"
+  system("xz", "--threads=0", "-6", "--keep", "--force", path, exception: true)
+  compressed
+end
+
+def uploaded?(key, bytes)
+  output = `aws s3api head-object --bucket #{BUCKET} --key #{key} 2>/dev/null`
+  return false if output.empty?
+
+  JSON.parse(output)["ContentLength"] == bytes
+end
+
+def upload(compressed, key)
+  system("aws", "s3", "cp", compressed, "s3://#{BUCKET}/#{key}", "--content-type", "application/x-xz", "--only-show-errors", exception: true)
+end
+
+ARGV.each do |given|
+  artifact = Census::Artifact.new(path: File.expand_path(given), root:)
+  abort "not under data/: #{given}" unless artifact.path.start_with?(root)
+  abort "no such file: #{given}" unless File.exist?(artifact.path)
+
+  puts "#{artifact.relative_path}: #{artifact.description}"
+  next if dry_running
+
+  compressed = compress(artifact.path)
+  compressed_bytes = File.size(compressed)
+  if uploaded?(artifact.key, compressed_bytes)
+    puts "  already in the bucket: #{artifact.key}"
+  else
+    puts "  upload: #{compressed_bytes} bytes to #{artifact.key}"
+    upload(compressed, artifact.key)
+  end
+
+  manifest[:artifacts][artifact.relative_path.to_sym] = {
+    bytes: artifact.bytes,
+    compressed: { bytes: compressed_bytes, sha256: Digest::SHA256.file(compressed).hexdigest },
+    description: artifact.description,
+    published: Date.today.iso8601,
+    sha256: artifact.sha256,
+    url: "https://#{BUCKET}.s3.#{REGION}.amazonaws.com/#{artifact.key}"
+  }
+  manifest[:artifacts] = manifest[:artifacts].sort.to_h
+  File.write(manifest_path, Census::JSONDocument.new(manifest).generate)
+  puts "  manifest written"
+end

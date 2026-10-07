@@ -1,0 +1,17 @@
+{
+  "bucket": "polycubes",
+  "region": "us-west-2",
+  "artifacts": {
+    "9/42947/cnf/corona2.cnf": {
+      "bytes": 65343391,
+      "compressed": {
+        "bytes": 1818712,
+        "sha256": "5ea4ca4c97d62c88d2145942f3b6473643fba62cb8e6947ed1d5ea5c980782c2"
+      },
+      "description": "formula for corona-2 of 9/42947",
+      "published": "2026-10-06",
+      "sha256": "029d657d8d5cc242c277ecd80a37a5b7b9eec6778e9987e0aa7704a4aba882f4",
+      "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/42947/corona2.cnf.xz"
+    }
+  }
+}
