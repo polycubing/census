@@ -49,6 +49,8 @@ data/
 
 Indices are assigned once, by lexicographic order of canonical forms, and never renumbered — `6/122` is a citable name whose ID is literally its path. Records carry the shape's geometry (canonical cells, symmetry order, chirality, a link to its mirror twin) and its verdict fields, which fill in as the pipeline runs. Meshes (`model.stl`, tiling and corona assemblies) are generated from certificates and land beside each record.
 
+Formulas and proofs too big for GitHub live in a public S3 bucket, listed in [`data/artifacts.json`](data/artifacts.json) with a URL and checksums for the raw and compressed bytes. To recheck a refutation yourself: download the formula and the proof from the manifest's URLs, `xz -d` both, confirm each `sha256`, then run `drat-trim formula proof` and look for `s VERIFIED`. No account and no trust in us at any step. `script/verify --artifacts` does the checksum half for whatever artifacts are on your disk.
+
 ## Status
 
 - [x] **M1 — Enumeration.** All 8,152 shapes through `n = 8` with counts matching OEIS [A000162](https://oeis.org/A000162) and [A038119](https://oeis.org/A038119) exactly.

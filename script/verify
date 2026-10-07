@@ -5,11 +5,21 @@
 # no solver trust. Heesch (non-tiler) certificates are refutation-backed: their
 # positive half (the saved corona witness) is rechecked here; their negative
 # half is drat-trim's jurisdiction (the DRAT proof under cnf/).
-# Exits nonzero if anything fails. Usage: script/verify
+# Exits nonzero if anything fails.
+#
+# Usage: script/verify [--artifacts]
+#
+# --artifacts also hashes every computed proof that is on disk against its
+# record, and requires a proof that is not on disk to be in the manifest
+# (data/artifacts.json). Slow: the biggest proof is gigabytes.
 
 require_relative "../lib/census"
 
+check_artifacts = ARGV.delete("--artifacts")
 root = File.expand_path("../data", __dir__)
+manifest_path = File.join(root, "artifacts.json")
+manifest = File.exist?(manifest_path) ? JSON.parse(File.read(manifest_path), symbolize_names: true)[:artifacts] : {}
+artifacts_checked = 0
 checked = 0
 unresolved = 0
 refutation_backed = []
@@ -51,6 +61,23 @@ Dir.glob(File.join(root, "*", "*", "shape.json")).sort.each do |path|
     if provenance == "computed"
       computations[kind] += 1
       failures << "#{record[:id]} (computed yet derived_from)" unless certificate[:derived_from].nil?
+
+      # The manifest's raw checksum for a published proof must be the one the
+      # record names, or the bucket holds some other bytes than the claim.
+      if kind == "proof"
+        proof_relative = "#{record[:id]}/#{certificate[:refutation]}"
+        entry = manifest[proof_relative.to_sym]
+        failures << "#{record[:id]} (manifest sha256 differs from the record)" if entry && entry[:sha256] != certificate[:refutation_sha256]
+        if check_artifacts
+          proof_path = File.join(root, proof_relative)
+          if File.exist?(proof_path)
+            failures << "#{record[:id]} (proof bytes differ from refutation_sha256)" unless Digest::SHA256.file(proof_path).hexdigest == certificate[:refutation_sha256]
+          elsif entry.nil?
+            failures << "#{record[:id]} (proof neither on disk nor in the manifest)"
+          end
+          artifacts_checked += 1
+        end
+      end
     else
       source_path = File.join(root, certificate[:derived_from].to_s, "shape.json")
       source = File.exist?(source_path) ? JSON.parse(File.read(source_path), symbolize_names: true) : {}
@@ -82,4 +109,5 @@ if refutation_backed.any?
   summary = computations.sort.map { |kind, count| "#{count} #{kind}" }.join(", ")
   puts "resting on #{computations.values.sum} independent computations (#{summary}), the rest derived by mirror"
 end
+puts "#{artifacts_checked} proofs hashed against their records and the manifest" if check_artifacts
 abort "FAILED: #{failures.join(', ')}" if failures.any?
