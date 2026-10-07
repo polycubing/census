@@ -74,6 +74,32 @@ RSpec.describe Census::AtHome::Client do
       expect(payload[:proof][:bytes]).to be_positive
     end
 
+    # Once the coordinator has the bytes, the volunteer's copy is only taking
+    # up disk. Fifty clients on the colo kept 17 GB of proofs it already had.
+    it "deletes its copy of a proof once the coordinator has accepted it" do
+      client = described_class.new(url: dead_url, handle: "spec", proofs: @proofs, formulas: @formulas)
+      FileUtils.mkdir_p(@proofs)
+      File.binwrite(File.join(@proofs, "#{digest}.drat"), "a\x02\x00")
+      allow(client).to receive(:post_proof).and_return({ accepted: true, note: "proof stored, queued for checking" })
+      tally = Hash.new(0)
+
+      client.send(:hand_over, [digest], tally)
+
+      expect(tally).to eq({ "proof delivered" => 1 })
+      expect(File).not_to exist(File.join(@proofs, "#{digest}.drat"))
+    end
+
+    it "keeps its copy when the coordinator refuses it" do
+      client = described_class.new(url: dead_url, handle: "spec", proofs: @proofs, formulas: @formulas)
+      FileUtils.mkdir_p(@proofs)
+      File.binwrite(File.join(@proofs, "#{digest}.drat"), "a\x02\x00")
+      allow(client).to receive(:post_proof).and_return({ accepted: false, note: "bytes hash to something else" })
+
+      client.send(:hand_over, [digest], Hash.new(0))
+
+      expect(File).to exist(File.join(@proofs, "#{digest}.drat"))
+    end
+
     # Fifty clients on one box share this cache. A formula must appear under
     # its name all at once or not at all, never half written.
     it "lands a fetched formula in the cache whole, leaving nothing half written behind" do

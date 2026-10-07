@@ -1,0 +1,47 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Bring verified proofs home from a coordinator on another machine, and free
+# its disk of them. Run from the laptop, the archive of record.
+#
+# Usage: script/at_home/drain-proofs <host> <destination> [--dry-run]
+#
+#   host                      ssh host running the coordinator and its Postgres
+#   destination               local directory to receive the proofs
+#
+# Asks the coordinator's database for every proof in state `verified`, which
+# the checker has finished with and nothing will read again, rsyncs those
+# files here, and deletes them there. Proofs still stored, wanted, or being
+# checked are not touched. Safe to repeat: a second run finds nothing left.
+# The database keeps each proof's digest and size, which is what the
+# manifest needs, and the bytes are here.
+#
+# Example:
+#
+#   script/at_home/drain-proofs x1.lab47.dev ~/Developer/polycubing/proofs-42947
+
+require "fileutils"
+require "tempfile"
+
+arguments = ARGV.dup
+dry_running = arguments.delete("--dry-run")
+host, destination = arguments
+abort "usage: script/at_home/drain-proofs <host> <destination> [--dry-run]" if host.nil? || destination.nil?
+
+query = "select proof_path from results where proof_state = 'verified' and proof_path is not null"
+paths = `ssh #{host} "psql -tA polycube_at_home -c \\"#{query}\\""`.lines.map(&:strip).reject(&:empty?)
+abort "could not list verified proofs on #{host}" unless $?.success? # rubocop:disable Style/SpecialGlobalVars
+
+# Only files the remote disk still has: a path drained earlier is already here.
+remaining = `ssh #{host} "ls -1 #{paths.map { "'#{it}'" }.join(' ')} 2>/dev/null"`.lines.map(&:strip)
+puts "#{paths.size} verified proofs, #{remaining.size} still on #{host}"
+exit if remaining.empty? || dry_running
+
+FileUtils.mkdir_p(destination)
+Tempfile.create("drain") do |list|
+  list.puts(remaining)
+  list.flush
+  system("rsync", "-a", "--files-from=#{list.path}", "--no-relative", "--remove-source-files", "--info=progress2",
+         "#{host}:/", destination, exception: true)
+end
+puts "drained #{remaining.size} proofs into #{destination}, #{`du -sh #{destination}`.split.first} there now"
