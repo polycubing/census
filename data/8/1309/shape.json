@@ -13,7 +13,7 @@
     "checked": {
       "checker": "drat-trim 2e3b2dc",
       "date": "2026-10-06",
-      "seconds": 24.3,
+      "seconds": 24.0,
       "verdict": "VERIFIED"
     },
     "derived_from": null,
@@ -21,8 +21,8 @@
     "provenance": "computed",
     "refutation": "cnf/corona2.drat",
     "refutation_kind": "proof",
-    "refutation_sha256": "621091ca6f4695ee65ecf1d3fc7c205b35402330a1a78fd499fbb628a737dc1f",
-    "solved_with": "kissat (version unrecorded, 2026-07); corona-2 UNSAT reproduced by CaDiCaL; drat-trim VERIFIED",
+    "refutation_sha256": "1c8a3d6a1992d85268fb758b9effe2dd2ef007439f55cface220c06d117b9bd0",
+    "solved_with": "kissat 4.0.4, re-solved 2026-10-06 on the byte-identical formula; replaces the 2026-07 proof (kissat version unrecorded, sha256 621091ca…, drat-trim VERIFIED 2026-07-07 and 2026-10-06); corona-2 UNSAT also reproduced by CaDiCaL in 2026-07",
     "type": "heesch"
   },
   "heesch": 1,
