@@ -100,6 +100,10 @@ module Census
           tally[verdict] += 1
           report&.call("#{unit[:shape_id]}  #{verdict}  #{answer[:accepted] ? 'accepted' : "REJECTED (#{answer[:note]})"}  #{seconds}s")
           break if limit && tally["accepted"] + tally["rejected"] >= limit
+
+          # Whatever killed the solver (a full disk, usually) is probably
+          # still true a second later. Give it half a minute.
+          sleep(idle_sleep * 6) if verdict == "error"
         end
         tally
       end
@@ -109,13 +113,22 @@ module Census
       attr_reader :base, :client_id, :contact, :cube_timeout, :display_name, :formulas, :give_up_after,
                   :handle, :proofs, :report
 
+      # A solver that dies (a full disk, a kill, a bad build) is reported as
+      # an error, which the coordinator turns into a released unit for someone
+      # else. It must not take the client down with it: ten of twelve clients
+      # once died in the same minute because kissat could not flush a proof.
       def solve(unit)
         started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
-        verdict, payload = case unit[:kind]
-                           when "shape" then solve_shape(unit)
-                           when "cube" then solve_cube(unit)
-                           else ["error", { note: "unknown unit kind #{unit[:kind]}" }]
-                           end
+        verdict, payload = begin
+          case unit[:kind]
+          when "shape" then solve_shape(unit)
+          when "cube" then solve_cube(unit)
+          else ["error", { note: "unknown unit kind #{unit[:kind]}" }]
+          end
+        rescue StandardError => error
+          report&.call("#{unit[:shape_id]}  solver failed: #{error.message.lines.first.to_s.strip[0, 160]}")
+          ["error", { note: error.message[0, 500] }]
+        end
         [verdict, payload, (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(2)]
       end
 

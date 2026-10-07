@@ -43,6 +43,26 @@ RSpec.describe Census::AtHome::Client do
     expect(notes.last).to match(/UNREPORTED/)
   end
 
+  # Ten of twelve clients once died in the same minute because kissat could
+  # not flush a proof to a full disk. A dead solver is a unit to hand back,
+  # not a reason to stop volunteering.
+  it "reports a solver crash as an error and keeps going" do
+    client = described_class.new(url: dead_url, handle: "spec", give_up_after: 1)
+    allow(client).to receive(:post).and_return({ client: { id: 1 } },
+                                               { unit: { id: 7, kind: "cube", shape_id: "9/42947", cube: [1] } },
+                                               { accepted: false, note: "unknown verdict error" },
+                                               { unit: nil })
+    allow(client).to receive(:solve_cube).and_raise(RuntimeError, "kissat failed with exit status ")
+    allow(client).to receive(:sleep)
+    notes = []
+    client.instance_variable_set(:@report, ->(line) { notes << line })
+
+    tally = client.run(once: true)
+
+    expect(tally).to include("error" => 1, "rejected" => 1)
+    expect(notes).to include(a_string_matching(/solver failed: kissat failed/))
+  end
+
   describe "refuting a cube" do
     let(:contradiction) { "spec/fixtures/proof/contradiction.cnf" }
     let(:digest)        { Digest::SHA256.file(contradiction).hexdigest }
