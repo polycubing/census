@@ -38,8 +38,18 @@ CREATE TABLE IF NOT EXISTS units (
   attempts     INTEGER NOT NULL DEFAULT 0,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-  UNIQUE (kind, shape_id, parent_id, payload)
+  -- NULLS NOT DISTINCT, because a shape unit has no parent, and two NULLs
+  -- would otherwise count as different and let the same shape be queued
+  -- twice. Re-seeding relies on a duplicate being refused.
+  CONSTRAINT units_identity UNIQUE NULLS NOT DISTINCT (kind, shape_id, parent_id, payload)
 );
+
+-- A database made before the constraint was named carries the old one, under
+-- which NULL parents were distinct. Replace it. Both statements are safe to
+-- repeat.
+ALTER TABLE units DROP CONSTRAINT IF EXISTS units_kind_shape_id_parent_id_payload_key;
+ALTER TABLE units DROP CONSTRAINT IF EXISTS units_identity;
+ALTER TABLE units ADD CONSTRAINT units_identity UNIQUE NULLS NOT DISTINCT (kind, shape_id, parent_id, payload);
 
 CREATE INDEX IF NOT EXISTS units_leasable ON units (status, lease_until);
 CREATE INDEX IF NOT EXISTS units_shape ON units (shape_id);

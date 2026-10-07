@@ -1,0 +1,77 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Queue a cube campaign's cover tree so volunteers re-solve it with proofs.
+#
+# Usage:
+#   script/at_home/seed-cubes <id> <level1.icnf> [<level2.icnf> ...] [options]
+#
+# Options.
+#
+#   --formula PATH            the formula the cubes split
+#                               default: data/<id>/cnf/corona<depth>.cnf, depth
+#                               being the record's reached.corona_refuted
+#   --dry-run                 audit the cover and count, queue nothing
+#
+# The levels are the cube files of the campaign in order, each with its
+# ledger beside it (<file>.results.jsonl). The cover must be closed, as
+# script/audit-cubes checks, or nothing is queued. Every refuted cube the
+# cover rests on becomes one pending unit. The shape and every standing cube
+# go in as split, so the coordinator's roll-up closes them as proofs arrive.
+#
+# Example, the triskelion:
+#
+#   script/at_home/seed-cubes 9/42947 data/9/42947/cnf/ledgers/c42947-{cubes,blade,blade2}.icnf
+
+require_relative '../../lib/census'
+
+def option arguments, flag, default
+  position = arguments.index flag
+  return default if position.nil?
+
+  arguments.slice!(position, 2).last
+end
+
+def flag? arguments, flag
+  position = arguments.index flag
+  return false if position.nil?
+
+  arguments.delete_at position
+
+  true
+end
+
+arguments = ARGV.dup
+dry_running = flag? arguments, '--dry-run'
+formula = option arguments, '--formula', nil
+unknown = arguments.select { it.start_with? '--' }
+abort "unknown option(s): #{unknown.join ' '}" unless unknown.empty?
+
+id = arguments.shift
+paths = arguments
+abort 'usage: script/at_home/seed-cubes <id> <level1.icnf> [<level2.icnf> ...] [--formula PATH] [--dry-run]' if id.nil? || paths.empty?
+
+root = File.expand_path '../../data', __dir__
+record = JSON.parse File.read(File.join(root, id, 'shape.json')), symbolize_names: true
+depth = record.dig :reached, :corona_refuted
+formula ||= File.join root, id, 'cnf', "corona#{depth}.cnf"
+formula = File.expand_path formula
+abort "formula not found: #{formula}" unless File.exist? formula
+
+levels = paths.map { Census::SAT::CubeTree.level it }
+tree = Census::SAT::CubeTree.new(levels:)
+unless tree.closed?
+  tree.failures.each { puts "FAIL #{it}" }
+  abort 'the cover is not closed, nothing queued'
+end
+
+puts "#{id}: #{tree.leaves.size} cube refutations to prove, #{tree.split_nodes.size + 1} split units above them"
+puts "formula: #{formula} (#{File.size formula} bytes)"
+exit if dry_running
+
+store = Census::AtHome::Store.new
+seeder = Census::AtHome::CubeSeeder.new store:, tree:, shape_id: id, cells: record[:cells], budgets: record[:budgets], cnf_path: formula
+counts = seeder.seed
+puts "queued #{counts[:leaves]} pending cube units under #{counts[:splits]} split units"
+puts store.status.inspect
+store.close
