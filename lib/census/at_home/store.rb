@@ -240,10 +240,12 @@ module Census
                    units.payload AS unit_payload
               FROM results JOIN units ON units.id = results.unit_id
              WHERE results.proof_state = ANY($1) AND results.proof_path IS NOT NULL
-             ORDER BY results.id
+             ORDER BY results.proof_bytes NULLS LAST, results.id
           SQL
         end
 
+        # Smallest first, so a few hour-long proofs never hold up hundreds of
+        # second-long ones behind them.
         rows.map do |row|
           { id: Integer(row["id"]), sha256: row["proof_sha256"], bytes: row["proof_bytes"] && Integer(row["proof_bytes"]),
             path: row["proof_path"], unit_id: Integer(row["unit_id"]), unit: JSON.parse(row["unit_payload"], symbolize_names: true) }
