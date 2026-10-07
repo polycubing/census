@@ -200,7 +200,10 @@ module Census
 
       # The coordinator asked to see proofs it was previously only told about.
       # Handing them over is what makes the digest more than a gesture, so it
-      # happens before taking more work.
+      # happens before taking more work. Public, because script/at_home/hand-over
+      # uses it to deliver proofs claimed by clients that are no longer running.
+      public
+
       def hand_over(wanted, tally)
         Array(wanted).each do |sha256|
           unless File.exist?(proof_path(sha256))
@@ -220,6 +223,8 @@ module Census
           File.delete(proof_path(sha256)) if answer[:accepted]
         end
       end
+
+      private
 
       # Retries while the coordinator is unreachable or unwell, and raises
       # only on failures retrying cannot fix (a malformed request of ours).

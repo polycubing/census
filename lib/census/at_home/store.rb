@@ -221,6 +221,15 @@ module Census
 
       def wanted_proof(sha256) = wanted_proofs_named(sha256).first
 
+      # Every digest currently wanted, whoever claimed it. For handing over
+      # proofs on behalf of clients that are no longer running.
+      def wanted_digests
+        rows = synchronize do |connection|
+          connection.exec("SELECT DISTINCT proof_sha256 FROM results WHERE proof_state = 'wanted' ORDER BY proof_sha256")
+        end
+        rows.map { it["proof_sha256"] }
+      end
+
       # Proofs whose bytes the coordinator holds but whose check did not end
       # in `verified`: stored (the checker was missing) or refuted (it said
       # no). Each with the unit whose formula it must be checked against.

@@ -1,0 +1,43 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Deliver every wanted proof that can be found in a directory, whoever
+# claimed it.
+#
+# Usage: script/at_home/hand-over [--proofs DIR] [--url URL]
+#
+#   --proofs DIR              where the proofs are, named by digest
+#                               default: proofs/
+#   --url URL                 the coordinator
+#                               default: http://127.0.0.1:9292
+#
+# A wanted proof is normally requested from the client that claimed it, on
+# that client's next lease. A client that has stopped never leases again, so
+# its proofs stay wanted and the cubes they refute never close. This asks
+# the database for every wanted digest and posts the matching files, which
+# the coordinator accepts from anyone, since the bytes have to hash to the
+# promised digest to land. Delivered copies are deleted, as a client would.
+
+require_relative '../../lib/census'
+
+def option arguments, flag, default
+  position = arguments.index flag
+  return default if position.nil?
+
+  arguments.slice!(position, 2).last
+end
+
+arguments = ARGV.dup
+proofs = option arguments, '--proofs', Census::AtHome::Client::DEFAULT_PROOFS
+url = option arguments, '--url', 'http://127.0.0.1:9292'
+abort "unknown argument(s): #{arguments.join ' '}" unless arguments.empty?
+
+store = Census::AtHome::Store.new
+wanted = store.wanted_digests
+store.close
+puts "#{wanted.size} proofs wanted"
+
+client = Census::AtHome::Client.new(url:, handle: 'hand-over', proofs:, report: ->(line) { puts line })
+tally = Hash.new(0)
+client.hand_over(wanted, tally)
+puts tally.inspect
