@@ -42,12 +42,26 @@ module Census
         @timeout = timeout
       end
 
+      # Whether a proof is in kissat's binary DRAT format rather than text.
+      # Binary DRAT begins with 'a' (an addition) or 'd' followed by a
+      # literal byte. Text DRAT begins with a digit, a minus, 'c', or 'd'
+      # followed by a space. drat-trim guesses this from the first twelve
+      # bytes, and a binary proof whose first twelve bytes are all printable
+      # gets read as text and fails. We decide, and tell it.
+      def self.binary?(path)
+        first, second = File.binread(path, 2).to_s.bytes
+        return false if first.nil?
+
+        first == "a".ord || (first == "d".ord && second != " ".ord)
+      end
+
       # A proof that fails to check is an answer, not an error, so this returns
       # a Result rather than raising. Only a missing checker raises.
       def check
         raise Missing, "drat-trim not found at #{self.class.executable}" unless self.class.available?
 
-        output, status = Open3.capture2e(self.class.executable, cnf_path, proof_path, "-t", timeout.to_s)
+        mode = self.class.binary?(proof_path) ? "-i" : "-I"
+        output, status = Open3.capture2e(self.class.executable, cnf_path, proof_path, "-t", timeout.to_s, mode)
 
         Result.new(output:, status: status.exitstatus)
       end

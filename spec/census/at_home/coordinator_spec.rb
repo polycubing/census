@@ -485,5 +485,21 @@ RSpec.describe Census::AtHome::Coordinator, :home do
     it "rejects a policy it does not know" do
       expect { described_class.new(store:, proof_policy: :sometimes) }.to raise_error(ArgumentError)
     end
+
+    # A proof that arrived while the checker was missing is kept, not lost.
+    # Once the checker exists, it gets its turn, and the parent settles.
+    it "rechecks held proofs from disk once the checker is available", :checker do
+      parent = seed_split
+      refute_the_child
+      checker = ENV.fetch("CENSUS_DRAT_TRIM", nil)
+      ENV["CENSUS_DRAT_TRIM"] = "/nonexistent/drat-trim"
+      coordinator.deliver_proof(sha256: digest, bytes:)
+      ENV["CENSUS_DRAT_TRIM"] = checker
+      expect(coordinator.status[:proofs]).to eq({ "stored" => 1 })
+
+      expect(coordinator.recheck).to eq({ "verified" => 1 })
+      expect(coordinator.status[:proofs]).to eq({ "verified" => 1 })
+      expect(store.unit(parent)[:status]).to eq("done")
+    end
   end
 end

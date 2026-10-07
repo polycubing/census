@@ -221,6 +221,25 @@ module Census
 
       def wanted_proof(sha256) = wanted_proofs_named(sha256).first
 
+      # Proofs whose bytes the coordinator holds but whose check did not end
+      # in `verified`: stored (the checker was missing) or refuted (it said
+      # no). Each with the unit whose formula it must be checked against.
+      def held_proofs(states:)
+        rows = synchronize do |connection|
+          connection.exec_params(<<~SQL, [PG::TextEncoder::Array.new.encode(states)])
+            SELECT results.id, results.proof_sha256, results.proof_path, results.unit_id, units.payload AS unit_payload
+              FROM results JOIN units ON units.id = results.unit_id
+             WHERE results.proof_state = ANY($1) AND results.proof_path IS NOT NULL
+             ORDER BY results.id
+          SQL
+        end
+
+        rows.map do |row|
+          { id: Integer(row["id"]), sha256: row["proof_sha256"], path: row["proof_path"],
+            unit_id: Integer(row["unit_id"]), unit: JSON.parse(row["unit_payload"], symbolize_names: true) }
+        end
+      end
+
       def record_proof(id:, state:, path: nil, note: nil)
         synchronize do |connection|
           connection.exec_params(<<~SQL, [id, state, path, note])

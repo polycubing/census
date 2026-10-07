@@ -35,4 +35,23 @@ RSpec.describe Census::SAT::DratTrim, :checker do
       .to raise_error(described_class::Missing, /drat-trim not found/)
   end
 
+  # drat-trim guesses binary or text from a proof's first twelve bytes, and a
+  # binary proof that happens to start with twelve printable bytes gets read
+  # as text and fails. We decide from the first byte and say so.
+  describe "proof format" do
+    let(:text_proof) { "spec/fixtures/proof/contradiction.text.drat" }
+
+    it "recognises kissat's binary format" do
+      expect(described_class.binary?(proof)).to be(true)
+    end
+
+    it "recognises text, which is what drat-trim itself writes" do
+      expect(described_class.binary?(text_proof)).to be(false)
+    end
+
+    it "verifies the same refutation in either format" do
+      expect(described_class.check(cnf_path: contradiction, proof_path: text_proof)).to be_verified
+      expect(described_class.check(cnf_path: contradiction, proof_path: proof)).to be_verified
+    end
+  end
 end

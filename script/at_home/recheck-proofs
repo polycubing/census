@@ -1,0 +1,30 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Run drat-trim again over proofs the coordinator holds but did not verify:
+# `stored` (the checker was missing at delivery) and `refuted` (it said no).
+#
+# Usage: script/at_home/recheck-proofs [--states stored,refuted]
+#
+# For after the checker is built or fixed. Each proof is checked against the
+# formula rebuilt from the coordinator's own CNF and the unit's cube, as at
+# delivery, and the result row is updated. A verified proof may be the last
+# one a parent was waiting on, so the roll-up runs too.
+
+require_relative '../../lib/census'
+
+arguments = ARGV.dup
+position = arguments.index '--states'
+states = position ? arguments.slice!(position, 2).last.split(',') : %w[stored refuted]
+abort "unknown argument(s): #{arguments.join ' '}" unless arguments.empty?
+
+store = Census::AtHome::Store.new
+policy = ENV.fetch('AT_HOME_PROOF_POLICY', 'every').to_sym
+proofs = ENV.fetch('AT_HOME_PROOFS', Census::AtHome::Coordinator::DEFAULT_PROOFS)
+timeout = Integer(ENV.fetch('AT_HOME_CHECK_TIMEOUT', Census::SAT::DratTrim::DEFAULT_TIMEOUT))
+coordinator = Census::AtHome::Coordinator.new store:, proofs:, proof_policy: policy, check_timeout: timeout
+
+tally = coordinator.recheck states:
+puts "rechecked #{states.join(' and ')} proofs: #{tally.inspect}"
+puts store.proof_states.inspect
+store.close

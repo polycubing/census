@@ -127,6 +127,18 @@ module Census
         closed
       end
 
+      # Run the checker again over proofs it could not check or rejected,
+      # from the bytes already on disk. For when the checker was absent, or
+      # misread a proof, and has since been fixed. Returns a tally by outcome.
+      def recheck(states: %w[stored refuted])
+        store.held_proofs(states:).each_with_object(Hash.new(0)) do |held, tally|
+          next tally["missing"] += 1 unless File.exist?(held[:path])
+
+          outcome = check_delivered(wanted: held, path: held[:path])
+          tally[outcome[:accepted] ? "verified" : "not verified"] += 1
+        end
+      end
+
       # Take delivery of a proof and check it.
       #
       # Four things hold before the checker is worth running: we asked for this
