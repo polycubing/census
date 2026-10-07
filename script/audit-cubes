@@ -22,38 +22,17 @@ require_relative "../lib/census"
 paths = ARGV
 abort "usage: script/audit-cubes <level1.icnf> [<level2.icnf> ...]" if paths.empty?
 
-levels = paths.map do |path|
-  cubes = Census::SAT::CubeFile.new(path:).cubes
-  cover = Census::SAT::CubeCover.new(cubes:)
-  ledger = Census::SAT::CubeLedger.new(path: "#{path}.results.jsonl")
-  { cover:, cubes:, ledger:, path: }
-end
-
-failures = []
-standing = []
+levels = paths.map { Census::SAT::CubeTree.level(it) }
+tree = Census::SAT::CubeTree.new(levels:)
 
 levels.each_with_index do |level, position|
-  cover, cubes, ledger, path = level.values_at(:cover, :cubes, :ledger, :path)
-  failures << "#{path}: SATISFIABLE cube(s) #{ledger.satisfied.inspect}" unless ledger.satisfied.empty?
-
-  pending = ledger.pending(count: cubes.size).map { cubes[it] }
-  if position.zero?
-    failures << "#{path}: not a complete sign cover of the formula" unless cover.complete?
-  else
-    unpartitioned = standing.reject { cover.partitions?(it) }
-    failures << "#{path}: #{unpartitioned.size} standing cube(s) from the previous level not partitioned" unless unpartitioned.empty?
-    pending = pending.select { |cube| standing.any? { |parent| (parent - cube).empty? } }
-  end
-
-  puts format("%-56s %6d cubes %6d refuted %5d standing", path, cubes.size, ledger.refuted.size, pending.size)
-  standing = pending
+  nodes = tree.nodes.select { it.level == position }
+  puts format("%-56s %6d cubes %6d refuted %5d standing", level[:path], level[:cubes].size, level[:ledger].refuted.size, nodes.count(&:standing?))
 end
 
-failures << "#{levels.last[:path]}: #{standing.size} cube(s) still standing" unless standing.empty?
-
-if failures.empty?
-  puts "closed: every region refuted across #{levels.size} level(s)"
+if tree.closed?
+  puts "closed: every region refuted across #{levels.size} level(s), resting on #{tree.leaves.size} cube refutations"
 else
-  failures.each { puts "FAIL #{it}" }
+  tree.failures.each { puts "FAIL #{it}" }
   exit 1
 end
