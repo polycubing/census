@@ -212,6 +212,29 @@ RSpec.describe Census::AtHome::Coordinator, :home do
 
         expect(store.unit(1)[:status]).to eq("split")
       end
+
+      # A split half has no result of its own. Its evidence is its children's,
+      # and it must still count for its parent once they close it.
+      it "settles the grandparent when a split half's own halves are refuted" do
+        report("exhausted", { cube: [-1] }, unit_id: 3)
+        report("unsat", { cube: [1], proof: }, unit_id: 2)
+        report("unsat", { cube: [-1, 2], proof: }, unit_id: 4)
+        answer = report("unsat", { cube: [-1, -2], proof: }, unit_id: 5)
+
+        expect(store.unit(3)[:status]).to eq("done")
+        expect(store.unit(1)[:status]).to eq("done")
+        expect(answer[:note]).to match(/settled unit 1/)
+      end
+
+      it "settles on demand what a missed roll-up left open" do
+        report("exhausted", { cube: [-1] }, unit_id: 3)
+        [[2, [1]], [4, [-1, 2]], [5, [-1, -2]]].each { |id, cube| report("unsat", { cube:, proof: }, unit_id: id) }
+        store.close_unit(id: 1, status: "split")
+        store.close_unit(id: 3, status: "split")
+
+        expect(coordinator.settle(shape_id: "9/2127")).to eq(2)
+        expect(store.unit(1)[:status]).to eq("done")
+      end
     end
   end
 

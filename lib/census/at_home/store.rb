@@ -241,19 +241,28 @@ module Census
       # Whether every child of a split is refuted.
       #
       # A child counts only with a verified `unsat` against it, and when proofs
-      # are required, only once its proof has been checked. A child that came
+      # are required, only once its proof has been checked. A child that was
+      # itself split has no result of its own, its evidence being its
+      # children's, so it counts once the roll-up closed it. A child that came
       # back `sat` does not merely fail to refute its parent, it settles the
       # parent the other way, so "all refuted" must never be inferred from
       # "all finished".
       def children_all_refuted?(parent_id, proofs_required: false)
         row = synchronize do |connection|
           connection.exec_params(<<~SQL, [parent_id, proofs_required]).first
-            SELECT count(DISTINCT units.id) AS children,
-                   count(DISTINCT units.id) FILTER (
-                     WHERE results.verdict = 'unsat' AND results.verified IS TRUE
-                       AND ($2 IS FALSE OR results.proof_state = 'verified')
+            SELECT count(*) AS children,
+                   count(*) FILTER (
+                     WHERE EXISTS (
+                             SELECT 1 FROM results
+                              WHERE results.unit_id = units.id
+                                AND results.verdict = 'unsat' AND results.verified IS TRUE
+                                AND ($2 IS FALSE OR results.proof_state = 'verified')
+                           )
+                        OR (units.status = 'done' AND EXISTS (
+                             SELECT 1 FROM units AS grandchildren WHERE grandchildren.parent_id = units.id
+                           ))
                    ) AS refuted
-              FROM units LEFT JOIN results ON results.unit_id = units.id
+              FROM units
              WHERE units.parent_id = $1
           SQL
         end
@@ -261,6 +270,48 @@ module Census
         children = Integer(row["children"])
 
         children.positive? && children == Integer(row["refuted"])
+      end
+
+      def shape_unit(shape_id)
+        row = synchronize do |connection|
+          connection.exec_params("SELECT id, status FROM units WHERE kind = 'shape' AND shape_id = $1 ORDER BY id LIMIT 1", [shape_id]).first
+        end
+        row && { id: Integer(row["id"]), status: row["status"] }
+      end
+
+      # Units of a shape still marked split, deepest first, for a settle pass.
+      def split_units(shape_id:)
+        rows = synchronize do |connection|
+          connection.exec_params("SELECT id FROM units WHERE shape_id = $1 AND status = 'split' ORDER BY id DESC", [shape_id])
+        end
+        rows.map { Integer(it["id"]) }
+      end
+
+      # Every cube of a shape that was not split further, each with its
+      # verified refutation when it has one. A cube tried more than once has
+      # several results, and the one whose proof was checked is the one that
+      # counts.
+      def cube_leaves(shape_id:)
+        rows = synchronize do |connection|
+          connection.exec_params(<<~SQL, [shape_id])
+            SELECT units.id, units.status, units.payload,
+                   results.proof_sha256, results.proof_bytes, results.proof_state, results.proof_path, results.seconds
+              FROM units
+                   LEFT JOIN results ON results.unit_id = units.id
+                                    AND results.verdict = 'unsat' AND results.verified IS TRUE
+             WHERE units.kind = 'cube' AND units.shape_id = $1
+               AND NOT EXISTS (SELECT 1 FROM units AS children WHERE children.parent_id = units.id)
+             ORDER BY units.id, (results.proof_state = 'verified') DESC NULLS LAST
+          SQL
+        end
+
+        rows.map do |row|
+          payload = JSON.parse(row["payload"], symbolize_names: true)
+          { id: Integer(row["id"]), status: row["status"], cube: payload[:cube], cnf_sha256: payload[:cnf_sha256],
+            proof_sha256: row["proof_sha256"], proof_bytes: row["proof_bytes"] && Integer(row["proof_bytes"]),
+            proof_state: row["proof_state"], proof_path: row["proof_path"],
+            seconds: row["seconds"] && Float(row["seconds"]) }
+        end.uniq { it[:id] }
       end
 
       def credit_client(id:, accepted:)

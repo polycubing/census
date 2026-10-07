@@ -107,6 +107,26 @@ module Census
 
       def wanted_proofs(client_id:) = store.wanted_proofs(client_id:)
 
+      # Close every split of a shape whose children are all refuted, deepest
+      # first, until nothing changes. The roll-up does this as results land,
+      # so this is for repair: a roll-up that was missed (the coordinator was
+      # down, or an earlier version counted wrong) never fires again on its
+      # own. Returns how many it closed.
+      def settle(shape_id:)
+        closed = 0
+        loop do
+          progressed = store.split_units(shape_id:).count do |id|
+            next false unless store.children_all_refuted?(id, proofs_required: every_proof?)
+
+            store.close_unit(id:, status: "done")
+            true
+          end
+          closed += progressed
+          break if progressed.zero?
+        end
+        closed
+      end
+
       # Take delivery of a proof and check it.
       #
       # Four things hold before the checker is worth running: we asked for this
