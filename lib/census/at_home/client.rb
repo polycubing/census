@@ -151,6 +151,12 @@ module Census
       # The formula lives on the coordinator, not here. Fetched once per
       # formula and cached by digest, because a shape split into thousands of
       # cubes hands out thousands of units that all refer to the same one.
+      #
+      # Written under a temporary name and renamed into place, because
+      # several clients on one machine share the cache, and one of them
+      # reading a formula another is still writing hands kissat a truncated
+      # file. Rename is atomic, so the cached name either does not exist or
+      # holds every byte.
       def formula_for(unit)
         digest = unit[:cnf_sha256]
         cached = File.join(formulas, "#{digest || "unit-#{unit[:id]}"}.cnf")
@@ -165,7 +171,9 @@ module Census
         end
 
         FileUtils.mkdir_p(formulas)
-        File.binwrite(cached, bytes)
+        arriving = "#{cached}.#{Process.pid}.arriving"
+        File.binwrite(arriving, bytes)
+        File.rename(arriving, cached)
 
         cached
       end

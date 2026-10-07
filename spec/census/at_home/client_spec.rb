@@ -74,6 +74,20 @@ RSpec.describe Census::AtHome::Client do
       expect(payload[:proof][:bytes]).to be_positive
     end
 
+    # Fifty clients on one box share this cache. A formula must appear under
+    # its name all at once or not at all, never half written.
+    it "lands a fetched formula in the cache whole, leaving nothing half written behind" do
+      FileUtils.rm(File.join(@formulas, "#{digest}.cnf"))
+      client = described_class.new(url: dead_url, handle: "spec", proofs: @proofs, formulas: @formulas)
+      allow(client).to receive(:fetch).and_return(File.binread(contradiction))
+
+      path = client.send(:formula_for, { id: 1, cnf_sha256: digest })
+
+      expect(path).to eq(File.join(@formulas, "#{digest}.cnf"))
+      expect(Digest::SHA256.file(path).hexdigest).to eq(digest)
+      expect(Dir.children(@formulas)).to eq(["#{digest}.cnf"])
+    end
+
     it "keeps the proof under its own digest, so it can be handed over later" do
       _verdict, payload = refute([])
       kept = File.join(@proofs, "#{payload[:proof][:sha256]}.drat")
