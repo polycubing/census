@@ -1,0 +1,78 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Check a non-tiler's DRAT refutation with drat-trim and stamp the result.
+#
+# Usage: script/check-proof <id> [--timeout SECONDS]
+#
+# The record's certificate names the proof (refutation) and its digest
+# (refutation_sha256). The bytes on disk must hash to that digest before the
+# checker runs, so what gets checked is what the record claims. The formula
+# is cnf/corona<depth>.cnf beside the proof, depth being reached.corona_refuted.
+# A VERIFIED verdict stamps certificate.checked with the checker, its version,
+# the date, the seconds it took, and the verdict. Anything else stamps nothing
+# and exits nonzero, since "could not check" and "wrong" are different answers
+# from "checked" and neither belongs in the record.
+#
+# Only computed records hold a proof. A derived twin leans on its mirror's.
+# The default limit is an hour. 9/8219's 6.8 GB core needs about eight.
+#
+# Examples:
+#
+#   script/check-proof 8/1309
+#   script/check-proof 9/8219 --timeout 40000
+
+require "date"
+require "digest"
+require_relative "../lib/census"
+
+def option(arguments, flag, default)
+  return default unless (position = arguments.index(flag))
+
+  arguments.delete_at(position)
+  arguments.delete_at(position)
+end
+
+arguments = ARGV.dup
+timeout = Integer(option(arguments, "--timeout", 3600))
+id = arguments.fetch(0) { abort "usage: script/check-proof <id> [--timeout SECONDS]" }
+
+directory = File.expand_path("../data/#{id}", __dir__)
+path = "#{directory}/shape.json"
+record = JSON.parse(File.read(path), symbolize_names: true)
+certificate = record[:certificate]
+
+abort "#{id} holds no heesch certificate" unless certificate&.fetch(:type, nil) == "heesch"
+abort "#{id} is #{certificate[:provenance]}, check #{certificate[:derived_from]} instead" unless certificate[:provenance] == "computed"
+abort "#{id} is backed by a #{certificate[:refutation_kind]}, not a proof" unless certificate[:refutation_kind] == "proof"
+
+proof_path = "#{directory}/#{certificate[:refutation]}"
+abort "proof not on this machine: #{proof_path}" unless File.exist?(proof_path)
+
+digest = Digest::SHA256.file(proof_path).hexdigest
+abort "proof bytes hash to #{digest}, record says #{certificate[:refutation_sha256]}" unless digest == certificate[:refutation_sha256]
+
+depth = record.dig(:reached, :corona_refuted)
+cnf_path = "#{directory}/cnf/corona#{depth}.cnf"
+abort "formula not on this machine: #{cnf_path}" unless File.exist?(cnf_path)
+
+vendor = File.expand_path("../vendor/drat-trim", __dir__)
+commit = `git -C #{vendor} rev-parse --short HEAD 2>/dev/null`.strip
+checker = commit.empty? ? "drat-trim (version unrecorded)" : "drat-trim #{commit}"
+
+puts "#{id}: #{checker} on #{File.basename(cnf_path)} (#{File.size(cnf_path)} bytes) + #{File.basename(proof_path)} (#{File.size(proof_path)} bytes), limit #{timeout}s"
+started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+result = Census::SAT::DratTrim.check(cnf_path:, proof_path:, timeout:)
+seconds = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round(1)
+puts "#{result.summary.empty? ? 'no verdict line' : result.summary} in #{seconds}s (exit #{result.status})"
+
+unless result.verified?
+  puts result.output.lines.last(10).join
+  abort "#{id}: not stamped"
+end
+
+record[:certificate] = certificate.merge(
+  checked: { checker:, date: Date.today.iso8601, seconds:, verdict: "VERIFIED" }
+)
+File.write(path, Census::JSONDocument.new(record).generate)
+puts "#{id}: certificate.checked stamped"
