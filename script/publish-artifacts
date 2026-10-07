@@ -15,12 +15,15 @@
 # A stranger checks a refutation with: download formula and proof, xz -d both,
 # compare sha256 to the manifest, drat-trim formula proof.
 #
-# Needs the AWS CLI signed in (aws login) with write access to the bucket.
-# Only the laptop does this. No credentials on borrowed machines.
+# Runs as the `polycubes` AWS profile, the IAM user polycubes-laptop, whose
+# only power is reading and writing public/ in this one bucket
+# (config/iam-laptop-policy.json). Set AWS_PROFILE to use another. Only the
+# laptop does this. No credentials on borrowed machines.
 
 require "date"
 require_relative "../lib/census"
 
+ENV["AWS_PROFILE"] ||= "polycubes"
 BUCKET = "polycubes"
 REGION = "us-west-2"
 
