@@ -26,6 +26,10 @@ proofs = ENV.fetch("AT_HOME_PROOFS", Census::AtHome::Coordinator::DEFAULT_PROOFS
 proof_policy = ENV.fetch("AT_HOME_PROOF_POLICY", "on_request").to_sym
 max_proof_bytes = Integer(ENV.fetch("AT_HOME_MAX_PROOF_BYTES", Census::AtHome::Coordinator::MAX_PROOF_BYTES))
 check_timeout = Integer(ENV.fetch("AT_HOME_CHECK_TIMEOUT", Census::SAT::DratTrim::DEFAULT_TIMEOUT))
-Census::AtHome::Server.coordinator = Census::AtHome::Coordinator.new(store:, proofs:, proof_policy:, max_proof_bytes:, check_timeout:)
+# AT_HOME_DEFER_CHECKS=1 stores delivered proofs for script/at_home/check-proofs
+# to verify in its own process, instead of checking inside the request.
+check_on_delivery = ENV.fetch("AT_HOME_DEFER_CHECKS", "0") != "1"
+Census::AtHome::Server.coordinator = Census::AtHome::Coordinator.new(store:, proofs:, proof_policy:, max_proof_bytes:,
+                                                                     check_timeout:, check_on_delivery:)
 
 run Census::AtHome::Server

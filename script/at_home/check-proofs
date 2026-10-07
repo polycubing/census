@@ -1,0 +1,69 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# The checker: run drat-trim over proofs the coordinator holds but has not
+# verified, in its own process, several at a time.
+#
+# Usage: script/at_home/check-proofs [--loop] [--jobs N] [--states stored,refuted] [--interval SECONDS]
+#
+# Options.
+#
+#   --loop                    keep going: check what is held, sleep, repeat
+#                               default: one pass, then exit
+#   --jobs N                  drat-trims to run at once
+#                               default: 4
+#   --states LIST             which proof states to check
+#                               default: stored,refuted
+#   --interval SECONDS        how long to sleep between passes, with --loop
+#                               default: 15
+#
+# Each proof is checked against the formula rebuilt from the coordinator's
+# own CNF and the unit's cube, exactly as it would have been at delivery,
+# and the result row is updated. A verified proof may be the last one a
+# parent was waiting on, so the roll-up runs too. Pair with a server started
+# with --defer-checks, or run once after the checker was built or fixed.
+#
+# Example, beside the triskelion campaign's server:
+#
+#   AT_HOME_PROOFS=$HOME/proofs-42947 AT_HOME_CHECK_TIMEOUT=36000 script/at_home/check-proofs --loop --jobs 8
+
+require_relative '../../lib/census'
+
+def option arguments, flag, default
+  position = arguments.index flag
+  return default if position.nil?
+
+  arguments.slice!(position, 2).last
+end
+
+def flag? arguments, flag
+  position = arguments.index flag
+  return false if position.nil?
+
+  arguments.delete_at position
+
+  true
+end
+
+arguments = ARGV.dup
+looping = flag? arguments, '--loop'
+jobs = Integer(option(arguments, '--jobs', 4))
+states = option(arguments, '--states', 'stored,refuted').split(',')
+interval = Integer(option(arguments, '--interval', 15))
+abort "unknown argument(s): #{arguments.join ' '}" unless arguments.empty?
+
+store = Census::AtHome::Store.new pool_size: jobs + 2
+policy = ENV.fetch('AT_HOME_PROOF_POLICY', 'every').to_sym
+proofs = ENV.fetch('AT_HOME_PROOFS', Census::AtHome::Coordinator::DEFAULT_PROOFS)
+timeout = Integer(ENV.fetch('AT_HOME_CHECK_TIMEOUT', Census::SAT::DratTrim::DEFAULT_TIMEOUT))
+coordinator = Census::AtHome::Coordinator.new store:, proofs:, proof_policy: policy, check_timeout: timeout
+
+loop do
+  tally = coordinator.recheck states:, jobs:
+  puts "#{Time.now.utc.iso8601}  checked #{tally.values.sum}: #{tally.inspect}  now #{store.proof_states.inspect}" unless tally.empty? && looping
+  break unless looping
+
+  sleep interval
+end
+
+store.close

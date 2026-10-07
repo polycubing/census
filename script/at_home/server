@@ -28,6 +28,11 @@
 #   --check-timeout SECONDS   how long drat-trim may spend on one proof
 #                               default: $AT_HOME_CHECK_TIMEOUT
 #                               or:      300
+#   --defer-checks            store delivered proofs and let
+#                             script/at_home/check-proofs verify them in its
+#                             own process, instead of checking inside the
+#                             request. A campaign's large proofs need this
+#                               default: check on delivery
 #   --throttle-limit N        requests one IP may make per minute. Fifty
 #                             clients on the coordinator's own machine are
 #                             one IP, so a campaign there raises this
@@ -54,6 +59,15 @@ def option arguments, flag, default
   arguments.slice!(position, 2).last
 end
 
+def flag? arguments, flag
+  position = arguments.index flag
+  return false if position.nil?
+
+  arguments.delete_at position
+
+  true
+end
+
 def check_for_unknown_options arguments
   return if arguments.empty?
 
@@ -61,6 +75,7 @@ def check_for_unknown_options arguments
 end
 
 # Extract options
+ENV['AT_HOME_DEFER_CHECKS'] = '1' if flag? arguments, '--defer-checks'
 ENV['PORT']                    = option arguments, '--port',            ENV.fetch('PORT', '9292')
 ENV['AT_HOME_THREADS']         = option arguments, '--threads',         ENV.fetch('AT_HOME_THREADS', '16')
 ENV['AT_HOME_PROOF_POLICY']    = option arguments, '--proof-policy',    ENV.fetch('AT_HOME_PROOF_POLICY', 'on_request')

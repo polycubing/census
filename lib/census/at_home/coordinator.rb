@@ -34,8 +34,14 @@ module Census
 
       attr_reader :max_proof_bytes, :proof_policy
 
+      # check_on_delivery: whether a delivered proof is checked inside the
+      # request. Right for a spike and wrong for a campaign, where one 700 MB
+      # proof holds a server thread for many minutes and every client's
+      # request times out behind it. Off, delivery stores the bytes and
+      # returns, and script/at_home/check-proofs verifies them in its own
+      # process, several at a time.
       def initialize(store:, lease_seconds: 900, proofs: DEFAULT_PROOFS, proof_policy: :on_request,
-                     max_proof_bytes: MAX_PROOF_BYTES, check_timeout: SAT::DratTrim::DEFAULT_TIMEOUT)
+                     max_proof_bytes: MAX_PROOF_BYTES, check_timeout: SAT::DratTrim::DEFAULT_TIMEOUT, check_on_delivery: true)
         raise ArgumentError, "proof_policy must be one of #{PROOF_POLICIES.inspect}" unless PROOF_POLICIES.include?(proof_policy)
 
         @store = store
@@ -44,6 +50,7 @@ module Census
         @proof_policy = proof_policy
         @max_proof_bytes = max_proof_bytes
         @check_timeout = check_timeout
+        @check_on_delivery = check_on_delivery
       end
 
       def every_proof? = proof_policy == :every
@@ -127,16 +134,26 @@ module Census
         closed
       end
 
-      # Run the checker again over proofs it could not check or rejected,
-      # from the bytes already on disk. For when the checker was absent, or
-      # misread a proof, and has since been fixed. Returns a tally by outcome.
-      def recheck(states: %w[stored refuted])
-        store.held_proofs(states:).each_with_object(Hash.new(0)) do |held, tally|
-          next tally["missing"] += 1 unless File.exist?(held[:path])
-
-          outcome = check_delivered(wanted: held, path: held[:path])
-          tally[outcome[:accepted] ? "verified" : "not verified"] += 1
-        end
+      # Run the checker over proofs held on disk but not verified: `stored`
+      # (delivered with checking deferred, or while the checker was missing)
+      # and `refuted` (it said no, and may have been wrong). Several at a
+      # time, since drat-trim is a separate process. Returns a tally.
+      def recheck(states: %w[stored refuted], jobs: 1)
+        queue = Queue.new
+        store.held_proofs(states:).each { queue << it }
+        queue.close
+        tally = Hash.new(0)
+        lock = Mutex.new
+        Array.new(jobs) do
+          Thread.new do
+            while (held = queue.pop)
+              outcome = File.exist?(held[:path]) ? check_delivered(wanted: held, path: held[:path]) : nil
+              label = outcome.nil? ? "missing" : (outcome[:accepted] ? "verified" : "not verified")
+              lock.synchronize { tally[label] += 1 }
+            end
+          end
+        end.each(&:join)
+        tally
       end
 
       # Take delivery of a proof and check it.
@@ -161,6 +178,11 @@ module Census
         # One upload, checked once per unit that claimed it: the same bytes
         # can refute several cubes, and each cube is a different formula.
         path = stored_at(sha256, bytes)
+        unless @check_on_delivery
+          wanted.each { store.record_proof(id: it[:id], state: "stored", path:, note: "queued for checking") }
+          return { accepted: true, note: "proof stored for #{wanted.size} unit(s), queued for checking" }
+        end
+
         outcomes = wanted.map { check_delivered(wanted: it, path:) }
         return outcomes.first if outcomes.size == 1
 

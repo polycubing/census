@@ -486,6 +486,23 @@ RSpec.describe Census::AtHome::Coordinator, :home do
       expect { described_class.new(store:, proof_policy: :sometimes) }.to raise_error(ArgumentError)
     end
 
+    # A campaign's proofs can be hundreds of megabytes, and a check inside the
+    # request holds a server thread for minutes while every client times out
+    # behind it. Deferred, delivery is a write and the checker is its own
+    # process.
+    it "stores a delivered proof and leaves the checking to the checker when told to", :checker do
+      deferred = described_class.new(store:, proofs: @proofs, proof_policy: :every, check_on_delivery: false)
+      parent = seed_split
+      refute_the_child
+
+      expect(deferred.deliver_proof(sha256: digest, bytes:)).to include(accepted: true, note: /queued/)
+      expect(deferred.status[:proofs]).to eq({ "stored" => 1 })
+      expect(store.unit(parent)[:status]).to eq("split")
+
+      expect(deferred.recheck(states: ["stored"], jobs: 2)).to eq({ "verified" => 1 })
+      expect(store.unit(parent)[:status]).to eq("done")
+    end
+
     # A proof that arrived while the checker was missing is kept, not lost.
     # Once the checker exists, it gets its turn, and the parent settles.
     it "rechecks held proofs from disk once the checker is available", :checker do
