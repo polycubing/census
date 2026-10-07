@@ -74,5 +74,5 @@ end
 record[:certificate] = certificate.merge(
   checked: { checker:, date: Date.today.iso8601, seconds:, verdict: "VERIFIED" }
 )
-File.write(path, Census::JSONDocument.new(record).generate)
+File.write(path, Census::JSONDocument.new(Census::Stages.stamp(record)).generate)
 puts "#{id}: certificate.checked stamped"

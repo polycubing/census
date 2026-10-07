@@ -1,0 +1,36 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Fill in `stages` on every record from the fields it already carries.
+#
+# Usage: script/stamp-stages [--dry-run]
+#
+# Idempotent: a record whose stages already match is left untouched, so a
+# second run reports zero. Writes are atomic, since hunts may be reading
+# data/ while this sweeps it. Every writer stamps stages itself from now on,
+# so this is for the one migration and for repair after a hand edit.
+
+require_relative "../lib/census"
+
+dry_running = ARGV.delete("--dry-run")
+abort "unknown option(s): #{ARGV.join(' ')}" unless ARGV.empty?
+
+root = File.expand_path("../data", __dir__)
+seen = 0
+changed = 0
+
+Dir.glob(File.join(root, "*", "*", "shape.json")).sort.each do |path|
+  record = JSON.parse(File.read(path), symbolize_names: true)
+  seen += 1
+  stamped = Census::Stages.stamp(record)
+  next if stamped == record
+
+  changed += 1
+  next if dry_running
+
+  temporary = "#{path}.stamping"
+  File.write(temporary, Census::JSONDocument.new(stamped).generate)
+  File.rename(temporary, path)
+end
+
+puts "#{dry_running ? 'would stamp' : 'stamped'} #{changed} of #{seen} records"

@@ -35,7 +35,7 @@ propagated = 0
         budgets: twin_record[:budgets],
         credits: record[:credits].merge(solved_by: "polycube-census v#{Census::VERSION} (mirrored from #{twin_record[:id]})")
       )
-      File.write(path, Census::JSONDocument.new(stamped).generate)
+      File.write(path, Census::JSONDocument.new(Census::Stages.stamp(stamped)).generate)
       puts "#{record[:id]}  tiler  mirrored from #{twin_record[:id]} (verified)"
       propagated += 1
     when "heesch"
@@ -72,7 +72,7 @@ propagated = 0
         reached: twin_record[:reached],
         credits: record[:credits].merge(solved_by: "polycube-census v#{Census::VERSION} (mirrored from #{twin_record[:id]})")
       )
-      File.write(path, Census::JSONDocument.new(stamped).generate)
+      File.write(path, Census::JSONDocument.new(Census::Stages.stamp(stamped)).generate)
       puts "#{record[:id]}  non_tiler  heesch #{twin_record[:heesch]}  mirrored from #{twin_record[:id]} (witness verified)"
       propagated += 1
     end

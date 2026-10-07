@@ -11,5 +11,6 @@
   "certificate": null,
   "heesch": null,
   "budgets": {},
-  "credits": { "prior_art": null, "solved_by": null, "verified_by": null }
+  "credits": { "prior_art": null, "solved_by": null, "verified_by": null },
+  "stages": []
 }

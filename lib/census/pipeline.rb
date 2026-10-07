@@ -76,7 +76,7 @@ module Census
     def stamp(path, record, shape, certificate)
       raise "certificate failed verification for #{record[:id]}" unless Verifier.new(certificate:, shape:).valid?
 
-      File.write(path, JSONDocument.new(tiler_fields(record, certificate)).generate)
+      File.write(path, JSONDocument.new(Stages.stamp(tiler_fields(record, certificate))).generate)
     end
 
     def tiler_fields(record, certificate)

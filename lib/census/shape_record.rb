@@ -43,7 +43,8 @@ module Census
         certificate: nil,
         heesch: nil,
         budgets: {},
-        credits: { solved_by: nil, verified_by: nil, prior_art: nil }
+        credits: { solved_by: nil, verified_by: nil, prior_art: nil },
+        stages: []
       }
     end
   end

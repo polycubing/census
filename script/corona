@@ -60,7 +60,7 @@ else
     reached: (record[:reached] || {}).merge(corona_refuted: depth),
     credits: record[:credits].merge(solved_by: "polycube-census v#{Census::VERSION}")
   )
-  File.write(path, Census::JSONDocument.new(record).generate)
+  File.write(path, Census::JSONDocument.new(Census::Stages.stamp(record)).generate)
   puts "UNSAT in #{elapsed}s: no depth-#{depth} corona exists. Heesch number = #{depth - 1}."
   puts "NON_TILER stamped. DRAT proof: #{proof_path}"
 end

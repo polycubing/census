@@ -47,7 +47,7 @@ module Census
       attr_reader :report, :root, :store
 
       def stamped(record, certificate, result)
-        record.merge(
+        stamped = record.merge(
           verdict: "tiler",
           tiles_rotations_only: true,
           tiles_with_reflections: true,
@@ -55,6 +55,7 @@ module Census
           budgets: result[:budgets] || record[:budgets],
           credits: record[:credits].merge(solved_by: "polycube-census v#{VERSION} (@home: #{result[:credit]})")
         )
+        Stages.stamp(stamped)
       end
     end
   end
