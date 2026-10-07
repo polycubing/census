@@ -15,11 +15,11 @@
   "reached": { "corona_sat": 2 },
   "attempts": [
     {
-      "as_of": "2026-10-06",
-      "core_hours": 3300,
+      "as_of": "2026-10-07",
+      "core_hours": 3350,
       "depth": 3,
-      "notes": "approximate total: kissat 4.0.4 and cadical 3 (source builds) one core each on the colo since 2026-08-12, 1,338 hours each as of 2026-10-06, no proof output; kissat on the laptop 128.4 hours, stopped 2026-08-16; three cube-and-conquer campaigns (4,096-way, 192-way, 25,920-way) through 2026-08-14, ledgers kept",
-      "status": "running"
+      "notes": "approximate total: kissat 4.0.4 and cadical 3 (source builds) one core each on the colo from 2026-08-12 to 2026-10-07, 1,347 hours each, stopped by hand with no verdict and no proof output (1.34 and 1.54 billion conflicts, glue drifting up, elimination flat); kissat on the laptop 128.4 hours, stopped 2026-08-16; three cube-and-conquer campaigns (4,096-way, 192-way, 25,920-way) through 2026-08-14, ledgers kept; solver logs kept under cnf/colo-logs/",
+      "status": "stopped"
     }
   ],
   "stages": [
