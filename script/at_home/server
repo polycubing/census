@@ -28,6 +28,11 @@
 #   --check-timeout SECONDS   how long drat-trim may spend on one proof
 #                               default: $AT_HOME_CHECK_TIMEOUT
 #                               or:      300
+#   --throttle-limit N        requests one IP may make per minute. Fifty
+#                             clients on the coordinator's own machine are
+#                             one IP, so a campaign there raises this
+#                               default: $AT_HOME_THROTTLE_LIMIT
+#                               or:      120
 #
 # A thin wrapper over `puma -C config/puma.rb`
 # Both this and `puma` load config.ru, so you may use either to start the server.
@@ -61,6 +66,7 @@ ENV['AT_HOME_THREADS']         = option arguments, '--threads',         ENV.fetc
 ENV['AT_HOME_PROOF_POLICY']    = option arguments, '--proof-policy',    ENV.fetch('AT_HOME_PROOF_POLICY', 'on_request')
 ENV['AT_HOME_MAX_PROOF_BYTES'] = option arguments, '--max-proof-bytes', ENV.fetch('AT_HOME_MAX_PROOF_BYTES', (100 * 1024 * 1024).to_s)
 ENV['AT_HOME_CHECK_TIMEOUT']   = option arguments, '--check-timeout',   ENV.fetch('AT_HOME_CHECK_TIMEOUT', '300')
+ENV['AT_HOME_THROTTLE_LIMIT']  = option arguments, '--throttle-limit',  ENV.fetch('AT_HOME_THROTTLE_LIMIT', '120')
 
 # Check options
 check_for_unknown_options arguments

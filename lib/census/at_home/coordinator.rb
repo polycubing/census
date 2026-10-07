@@ -135,18 +135,26 @@ module Census
       # point. Checking a proof against a formula the sender chose proves only
       # that they can write two matching files.
       def deliver_proof(sha256:, bytes:)
-        wanted = store.wanted_proof(sha256)
-        return refusal("no proof was asked for with that digest") unless wanted
+        wanted = store.wanted_proofs_named(sha256)
+        return refusal("no proof was asked for with that digest") if wanted.empty?
 
         if bytes.bytesize > max_proof_bytes
-          store.record_proof(id: wanted[:id], state: "too_large", note: "#{bytes.bytesize} bytes exceeds the upload cap")
+          wanted.each { store.record_proof(id: it[:id], state: "too_large", note: "#{bytes.bytesize} bytes exceeds the upload cap") }
           return refusal("proof exceeds the #{max_proof_bytes} byte cap")
         end
 
         digest = Digest::SHA256.hexdigest(bytes)
         return refusal("bytes hash to #{digest[0, 12]}, not the promised #{sha256[0, 12]}") unless digest == sha256
 
-        check_delivered(wanted:, sha256:, bytes:)
+        # One upload, checked once per unit that claimed it: the same bytes
+        # can refute several cubes, and each cube is a different formula.
+        path = stored_at(sha256, bytes)
+        outcomes = wanted.map { check_delivered(wanted: it, path:) }
+        return outcomes.first if outcomes.size == 1
+
+        verified = outcomes.count { it[:accepted] }
+        { accepted: verified == outcomes.size,
+          note: "proof checked against #{outcomes.size} units: #{verified} verified, #{outcomes.size - verified} not" }
       end
 
       private
@@ -219,8 +227,7 @@ module Census
 
       # Rebuild the exact formula the proof claims to refute, from the base CNF
       # and the cube this coordinator handed out, then let drat-trim decide.
-      def check_delivered(wanted:, sha256:, bytes:)
-        path = stored_at(sha256, bytes)
+      def check_delivered(wanted:, path:)
         unit = wanted[:unit]
 
         result = Tempfile.create(["census-cube", ".cnf"]) do |formula|

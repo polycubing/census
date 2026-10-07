@@ -51,8 +51,9 @@ module Census
 
       # Generous enough that a client leasing, solving, and submitting in a
       # tight loop never trips it; tight enough that a runaway or a flood
-      # gets slowed down.
-      REQUESTS_PER_PERIOD = 120
+      # gets slowed down. Fifty clients on the coordinator's own machine are
+      # one IP, so a campaign there raises it through the environment.
+      REQUESTS_PER_PERIOD = Integer(ENV.fetch("AT_HOME_THROTTLE_LIMIT", 120))
       THROTTLE_PERIOD_SECONDS = 60
 
       class << self

@@ -388,6 +388,37 @@ RSpec.describe Census::AtHome::Coordinator, :home do
     it "asks only for proofs that were claimed" do
       expect(coordinator.want_proof(digest)).to be(false)
     end
+
+    # Unit propagation alone refutes thousands of easy cubes, and kissat
+    # writes the identical one-line proof for each. One upload must serve
+    # them all, each checked against its own cube's formula.
+    describe "a proof several units share" do
+      def claim_twice
+        [[], [1]].each { store.add_unit(kind: "cube", shape_id: "8/1309", payload: { cnf_path: contradiction, cube: it }) }
+        worker = coordinator.register(handle: "spec")
+        2.times do
+          unit = coordinator.lease(client_id: worker[:id])
+          coordinator.submit(unit_id: unit[:id], client_id: worker[:id], verdict: "unsat",
+                             payload: { cube: unit[:cube], proof: { sha256: digest, bytes: bytes.bytesize } })
+        end
+        coordinator.want_proof(digest)
+        worker
+      end
+
+      it "is asked for from the client once" do
+        worker = claim_twice
+        expect(coordinator.wanted_proofs(client_id: worker[:id])).to eq([digest])
+      end
+
+      it "is checked against every unit that claimed it on one delivery", :checker do
+        claim_twice
+
+        answer = coordinator.deliver_proof(sha256: digest, bytes:)
+
+        expect(answer).to include(accepted: true, note: /2 units: 2 verified/)
+        expect(coordinator.status[:proofs]).to eq({ "verified" => 2 })
+      end
+    end
   end
 
   # A proof-backed theorem needs every proof, checked, before anything rests

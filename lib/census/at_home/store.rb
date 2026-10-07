@@ -148,12 +148,16 @@ module Census
 
       # The proofs the coordinator has decided it wants but has not received.
       # A worker asks on its next visit whether anything is owed.
+      # Each digest once, however many of the client's refutations share it.
+      # Thousands of easy cubes fall to unit propagation alone and produce the
+      # identical one-line proof, and one upload of it serves them all.
       def wanted_proofs(client_id:)
         rows = synchronize do |connection|
           connection.exec_params(<<~SQL, [client_id])
-            SELECT proof_sha256 FROM results
+            SELECT proof_sha256, min(created_at) AS first_claimed FROM results
              WHERE client_id = $1 AND proof_state = 'wanted'
-             ORDER BY created_at
+             GROUP BY proof_sha256
+             ORDER BY first_claimed
           SQL
         end
 
@@ -194,22 +198,28 @@ module Census
       # Which unit a promised proof belongs to, so the formula it must refute
       # can be rebuilt. Only proofs actually asked for are answerable, so an
       # upload nobody requested has nowhere to land.
-      def wanted_proof(sha256)
-        row = synchronize do |connection|
-          connection.exec_params(<<~SQL, [sha256]).first
+      # Every wanted result that named this digest, each with the unit whose
+      # formula the proof must be checked against. The same bytes can refute
+      # several cubes, and each cube is its own formula.
+      def wanted_proofs_named(sha256)
+        rows = synchronize do |connection|
+          connection.exec_params(<<~SQL, [sha256])
             SELECT results.id, results.proof_bytes, results.unit_id, units.payload AS unit_payload
               FROM results JOIN units ON units.id = results.unit_id
              WHERE results.proof_sha256 = $1 AND results.proof_state = 'wanted'
-             LIMIT 1
+             ORDER BY results.id
           SQL
         end
-        return nil unless row
 
-        { id: Integer(row["id"]),
-          bytes: row["proof_bytes"] && Integer(row["proof_bytes"]),
-          unit_id: Integer(row["unit_id"]),
-          unit: JSON.parse(row["unit_payload"], symbolize_names: true) }
+        rows.map do |row|
+          { id: Integer(row["id"]),
+            bytes: row["proof_bytes"] && Integer(row["proof_bytes"]),
+            unit_id: Integer(row["unit_id"]),
+            unit: JSON.parse(row["unit_payload"], symbolize_names: true) }
+        end
       end
+
+      def wanted_proof(sha256) = wanted_proofs_named(sha256).first
 
       def record_proof(id:, state:, path: nil, note: nil)
         synchronize do |connection|
