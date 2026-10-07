@@ -47,10 +47,11 @@ FileUtils.mkdir_p(destination)
 Tempfile.create("drain") do |list|
   list.puts(paths)
   list.flush
-  command = ["rsync", "-a", "--files-from=#{list.path}", "--no-relative", "--ignore-missing-args", "--remove-source-files", "--stats"]
+  # Progress streams to the terminal as it goes: a drain can be gigabytes,
+  # and a silent minute looks like a hang.
+  command = ["rsync", "-a", "--files-from=#{list.path}", "--no-relative", "--ignore-missing-args", "--remove-source-files",
+             "--info=progress2,name1,stats1"]
   command << "--dry-run" if dry_running
-  output = IO.popen(command + ["#{host}:/", destination], &:read)
-  abort "rsync failed:\n#{output}" unless $?.success? # rubocop:disable Style/SpecialGlobalVars
-  moved = output[/Number of regular files transferred: ([\d,]+)/, 1] || "0"
-  puts "#{dry_running ? 'would drain' : 'drained'} #{moved} proofs into #{destination}, #{`du -sh #{destination}`.split.first} there now"
+  system(*command, "#{host}:/", destination, exception: true)
+  puts "#{dry_running ? 'would drain' : 'drained'} into #{destination}, #{`du -sh #{destination}`.split.first} there now"
 end
