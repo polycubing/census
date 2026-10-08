@@ -216,3 +216,32 @@ RSpec.describe Census::AtHome::Client, "discarding proofs" do
     expect(File).not_to exist(File.join(@proofs, "#{digest}.drat"))
   end
 end
+
+RSpec.describe Census::AtHome::Client, "sharing a proof directory" do
+  let(:digest) { "d" * 64 }
+
+  around do |example|
+    Dir.mktmpdir do |dir|
+      @proofs = File.join(dir, "proofs")
+      @formulas = File.join(dir, "formulas")
+      example.run
+    end
+  end
+
+  # Twenty colo clients shared one directory, handed over the same one-line
+  # proof, and seventeen died on the delete the first one had already done.
+  it "survives another client deleting the same proof first" do
+    client = described_class.new(url: "http://127.0.0.1:1", handle: "spec", proofs: @proofs, formulas: @formulas)
+    FileUtils.mkdir_p(@proofs)
+    path = File.join(@proofs, "#{digest}.drat")
+    File.binwrite(path, "a\x02\x00")
+    allow(client).to receive(:post_proof) do
+      File.delete(path)
+      { accepted: true, note: "proof stored, queued for checking" }
+    end
+    tally = Hash.new(0)
+
+    expect { client.hand_over([digest], tally) }.not_to raise_error
+    expect(tally).to eq({ "proof delivered" => 1 })
+  end
+end

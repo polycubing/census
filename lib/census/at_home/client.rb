@@ -257,7 +257,7 @@ module Census
           # The coordinator holds the bytes now, written whole under the same
           # digest, or will never take them: either way this copy is only
           # taking up a volunteer's disk.
-          File.delete(proof_path(sha256)) if answer[:accepted] || answer[:discard]
+          forget(sha256) if answer[:accepted] || answer[:discard]
         end
       end
 
@@ -265,12 +265,22 @@ module Census
       # they were over its cap and their cube was split instead.
       def discard(digests, tally)
         Array(digests).each do |sha256|
-          next unless File.exist?(proof_path(sha256))
+          next unless forget(sha256)
 
-          File.delete(proof_path(sha256))
           tally["proof discarded"] += 1
           report&.call("proof #{sha256[0, 12]}  discarded, the coordinator will not take it")
         end
+      end
+
+      # Delete this copy of a proof. Clients sharing one proof directory, as
+      # the colo's twenty did, hand over the same file and race to delete it:
+      # the loser must not die over a file that is already gone. Returns
+      # whether this call removed it.
+      def forget(sha256)
+        File.delete(proof_path(sha256))
+        true
+      rescue Errno::ENOENT
+        false
       end
 
       private
