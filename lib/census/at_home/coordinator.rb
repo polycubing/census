@@ -196,6 +196,18 @@ module Census
         tally
       end
 
+      # Give up on refutations whose proof was asked for `older_than` seconds
+      # ago and never arrived, and queue their cubes again. A claim with no
+      # proof behind it is worth nothing to a theorem, and a cube stuck
+      # behind one never closes its parent. Returns the units reopened.
+      def reopen_undelivered(older_than: 3600)
+        store.undelivered_proofs(older_than:).map do |result|
+          store.abandon_result(id: result[:id], unit_id: result[:unit_id],
+                               note: "proof #{result[:sha256][0, 12]} never delivered, unit reopened")
+          result[:unit_id]
+        end
+      end
+
       # The checker as a service: `jobs` workers take the smallest held proof
       # not yet taken, and the pile is refilled from the database every
       # `interval` seconds while they work. A pass-at-a-time loop let one

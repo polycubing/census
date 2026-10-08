@@ -568,12 +568,13 @@ RSpec.describe Census::AtHome::Coordinator, :home do
         worker = hub.register(handle: "spec")
 
         claim(hub, worker, [1])
-        expect(hub.basin).to include(faucet: "open")
         claim(hub, worker, [-1])
+        expect(hub.basin).to include(faucet: "open", bytes: 0)
+
+        hub.deliver_proof(sha256: digest, bytes:)
         expect(hub.basin).to include(faucet: "closed", bytes: 2 * bytes.bytesize)
         expect(hub.lease(client_id: worker[:id])).to be_nil
 
-        hub.deliver_proof(sha256: digest, bytes:)
         hub.recheck(states: ["stored"])
         expect(hub.basin).to include(faucet: "open", bytes: 0)
       end
@@ -589,6 +590,32 @@ RSpec.describe Census::AtHome::Coordinator, :home do
 
         free = 10_000
         expect(hub.lease(client_id: worker[:id])).not_to be_nil
+      end
+
+      it "counts only what is on the hub's disk, not proofs still on volunteers'" do
+        hub = described_class.new(store:, proofs: @proofs, proof_policy: :every, check_on_delivery: false, basin_high_bytes: 1)
+        seed_two_leaves
+        worker = hub.register(handle: "spec")
+
+        claim(hub, worker, [1])
+        expect(hub.basin).to include(faucet: "open", bytes: 0)
+        hub.deliver_proof(sha256: digest, bytes:)
+        expect(hub.basin).to include(faucet: "closed", bytes: bytes.bytesize)
+      end
+
+      # A proof nobody can deliver must not hold a cube, or the faucet, forever.
+      it "reopens a cube whose proof was wanted too long and never came" do
+        hub = described_class.new(store:, proofs: @proofs, proof_policy: :every)
+        seed_two_leaves
+        worker = hub.register(handle: "spec")
+        claim(hub, worker, [1])
+        expect(hub.status[:proofs]).to eq({ "wanted" => 1 })
+
+        expect(hub.reopen_undelivered(older_than: 3600)).to eq([])
+        expect(hub.reopen_undelivered(older_than: 0)).to eq([2])
+        expect(hub.status[:units]).to include("pending" => 2)
+        expect(hub.status[:proofs]).to eq({ "none" => 1 })
+        expect(store.children_all_refuted?(1, proofs_required: true)).to be(false)
       end
 
       it "leases freely with no marks set" do

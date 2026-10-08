@@ -267,13 +267,42 @@ module Census
         end
       end
 
-      # Bytes of proof the hub is holding or about to receive: stored (waiting
-      # on the checker) and wanted (on a volunteer's disk, coming). The basin.
+      # Bytes of proof on the hub's own disk waiting for the checker. The
+      # basin. Wanted proofs are on volunteers' disks and are not counted:
+      # seven that no client could ever deliver once held the faucet shut
+      # with nothing stored at all.
       def basin_bytes
         synchronize do |connection|
-          row = connection.exec("SELECT coalesce(sum(proof_bytes), 0) AS bytes FROM results WHERE proof_state IN ('stored', 'wanted')").first
+          row = connection.exec("SELECT coalesce(sum(proof_bytes), 0) AS bytes FROM results WHERE proof_state = 'stored'").first
           Integer(row["bytes"])
         end
+      end
+
+      # Refutations whose proof was asked for longer ago than `older_than`
+      # seconds and never arrived. The client that claimed them is gone or
+      # lost the file, and the cube is stuck behind a promise nobody can keep.
+      def undelivered_proofs(older_than:)
+        rows = synchronize do |connection|
+          connection.exec_params(<<~SQL, [older_than])
+            SELECT results.id, results.unit_id, results.proof_sha256, units.status AS unit_status
+              FROM results JOIN units ON units.id = results.unit_id
+             WHERE results.proof_state = 'wanted'
+               AND results.created_at < now() - ($1 || ' seconds')::interval
+             ORDER BY results.id
+          SQL
+        end
+        rows.map { { id: Integer(it["id"]), unit_id: Integer(it["unit_id"]), sha256: it["proof_sha256"], unit_status: it["unit_status"] } }
+      end
+
+      # Withdraw a refutation whose proof never came, so it counts for nothing,
+      # and put its unit back in the queue for someone else to solve.
+      def abandon_result(id:, unit_id:, note:)
+        synchronize do |connection|
+          connection.exec_params(<<~SQL, [id, note])
+            UPDATE results SET verified = FALSE, proof_state = 'none', verifier_note = $2 WHERE id = $1
+          SQL
+        end
+        release_unit(unit_id)
       end
 
       def close_unit(id:, status:)

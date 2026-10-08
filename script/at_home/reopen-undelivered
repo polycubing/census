@@ -1,0 +1,47 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Give up on refutations whose proof was asked for and never arrived, and
+# queue their cubes again.
+#
+# Usage: script/at_home/reopen-undelivered [--older-than SECONDS] [--dry-run]
+#
+#   --older-than SECONDS      how long a proof may stay wanted before its
+#                             claim is withdrawn
+#                               default: 3600
+#   --dry-run                 list them, change nothing
+#
+# A wanted proof is requested from the client that claimed it, on that
+# client's next lease. A client that has stopped, or lost the file, never
+# delivers, and the cube sits done on a promise nobody can keep, so its
+# parent never closes. Withdrawing the claim (the result is marked
+# unverified, its proof state none) and releasing the unit lets another
+# client solve the cube and deliver a proof of its own.
+
+require_relative '../../lib/census'
+
+def option arguments, flag, default
+  position = arguments.index flag
+  return default if position.nil?
+
+  arguments.slice!(position, 2).last
+end
+
+arguments = ARGV.dup
+dry_running = arguments.delete '--dry-run'
+older_than = Integer(option(arguments, '--older-than', 3600))
+abort "unknown argument(s): #{arguments.join ' '}" unless arguments.empty?
+
+store = Census::AtHome::Store.new
+stuck = store.undelivered_proofs older_than:
+puts "#{stuck.size} proof(s) wanted for more than #{older_than}s and never delivered"
+stuck.each { puts "  result #{it[:id]}  unit #{it[:unit_id]} (#{it[:unit_status]})  proof #{it[:sha256][0, 12]}" }
+
+unless dry_running || stuck.empty?
+  coordinator = Census::AtHome::Coordinator.new store:
+  reopened = coordinator.reopen_undelivered older_than:
+  puts "reopened units #{reopened.inspect}"
+  puts store.status[:units].inspect
+end
+
+store.close
