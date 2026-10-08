@@ -235,6 +235,20 @@ Shape ids _are_ paths — `9/2127` is already the citable name in `data/`, in th
 
 Notes on the choices: `@` is a legal path character and `/@home` looks good, but `/at-home` is canonical because static-site generators can balk at a directory named `@home`, chat clients try to turn it into a mention, and an `@` inside a printed citation reads ambiguously. Paper URLs use title slugs rather than arXiv ids so they survive preprint-to-journal moves. The volunteer list is machine-generated and potentially enormous; `/thanks` is hand-written and small — different pages for different provenance. No `/donate`: there is no money in this, and a donate link would create an expectation to manage.
 
+## Stories: write-ups of special cases
+
+Some shapes carry a lesson that no table of verdicts conveys. Each gets a write-up, as prose with coordinates, layer diagrams, and rotatable models, on the site under `/stories/` and as raw material for the paper. The point of each is the same: two shapes that look nearly identical and come out profoundly different, or one shape whose behaviour corrects an intuition. Candidates, in rough order of how much they teach:
+
+- **The four noses: 9/8203, 9/8214, 9/8219, 9/8220.** One base, the square ring with a corner missing, plus a domino lying flat on it with its first cell over the ring's centre, pointing one of four ways. Nose toward the missing corner (8219, 8220): Heesch 1, refuted. Nose away (8203, 8214): wraps twice, open. The lesson learned writing it up (2026-10-08): the hole is not "impossible to plug", every one of the four has a verified corona-1 in which a copy's end cell sits in the pocket. Copies reach around each other because the constraints are about where cubes end up, not how they could get there. Interlocking is free. The thing that separates the pairs is what the nose's direction does to the second corona, and that is a conjecture worth stating.
+- **The square ring, 8/1309.** The smallest non-tiler, and the first place the interlocking lesson appears: chainmail gets exactly one layer. The hole-cascade counting argument, if it ever closes, belongs here.
+- **The ring family.** 3×3 refuted, 4×4 and 3×4 tile, 5×5 refuted, 3×5 wraps twice. The conjecture that a skinny rectangular ring tiles iff its tunnel has an even dimension, and what pair-doubling looks like when it works.
+- **The staircase, 9/2127.** A pinched tunnel, the only sealed hole among the survivors, a verified 228-copy second corona, and about 3,350 core-hours of corona-3 without a verdict. The census's one genuinely unanswered question, and the best illustration of why a refutation needs a proof and not a solver's word.
+- **The triskelion, 9/42947 and 9/42969.** Three perpendicular bars braided around a vacant corner, chiral because the braid has a handedness, refuted by cube-and-conquer and then re-proven cube by cube through Polycubing@home. The "carried emptiness" theme: holes, tunnels, and braided pockets as the engine of non-tiling.
+- **The Greek cross, 9/48258.** The most recognisable non-tiler, refuted in 140 seconds. A good first story because the shape needs no introduction.
+- **Mirror twins.** A shape tiles iff its mirror image does, so the census solves one and reflects the certificate. Where that is obvious and where it is surprising (a chiral shape whose tiling needs both hands is census content in itself).
+
+Every story is built from the records: the cells, the witnesses, the proofs' digests. Nothing is described from memory, which is also the rule for writing them (see the 2026-08-10 characterisation correction in NOTES).
+
 ## Someday / future
 
 - **Lean (formal verification), two hooks.** At M4: check solver UNSAT proofs with a formally verified checker (Lean 4's LRAT checker or cake_lpr) for headline claims — drat-trim is itself unverified C. Post-M8 stretch: formalize the encoding's soundness ("CNF UNSAT ⇒ no tiling of ℤ³") in Lean, making the smallest-non-tiler result a fully machine-checked theorem; potential Lean-community collaboration.
