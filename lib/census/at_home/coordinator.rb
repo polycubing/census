@@ -134,6 +134,10 @@ module Census
         store.want_proof(proof[:sha256]) if proof && every_proof?
         store.credit_client(id: client_id, accepted:)
 
+        # A proof the hub cannot carry is a cube too big to carry: it splits,
+        # the same as one too hard to solve, and the worker drops the file.
+        return { accepted:, discard: true, note: discard_oversized(proof[:sha256], proof[:bytes]) } if proof && oversized?(proof[:bytes])
+
         unless accepted
           store.release_unit(unit_id)
           return { accepted:, note: }
@@ -153,7 +157,29 @@ module Census
       # requested has nowhere to land.
       def want_proof(sha256) = store.want_proof(sha256).positive?
 
-      def wanted_proofs(client_id:) = store.wanted_proofs(client_id:)
+      # The proofs a client owes the hub, and the ones it should throw away.
+      # Smallest first, and only as many as the hub's disk has room for above
+      # its floor: the web server buffers an upload before the hub stores it,
+      # so each one needs twice its size. Claims over the cap, including any
+      # made before the cap was set, split their cube here and are discarded.
+      def proofs_owed(client_id:)
+        oversized, fitting = store.wanted_proofs(client_id:).partition { oversized?(it[:bytes]) }
+        oversized.each { discard_oversized(it[:sha256], it[:bytes]) }
+
+        room = room_bytes
+        wanted = fitting.sort_by { it[:bytes].to_i }.filter_map do |proof|
+          next proof[:sha256] if room.nil?
+
+          needed = proof[:bytes].to_i * 2
+          next nil if needed > room
+
+          room -= needed
+          proof[:sha256]
+        end
+        { wanted:, discard: oversized.map { it[:sha256] } }
+      end
+
+      def wanted_proofs(client_id:) = proofs_owed(client_id:)[:wanted]
 
       # Close every split of a shape whose children are all refuted, deepest
       # first, until nothing changes. The roll-up does this as results land,
@@ -280,9 +306,8 @@ module Census
         wanted = store.wanted_proofs_named(sha256)
         return refusal("no proof was asked for with that digest") if wanted.empty?
 
-        if bytes.bytesize > max_proof_bytes
-          wanted.each { store.record_proof(id: it[:id], state: "too_large", note: "#{bytes.bytesize} bytes exceeds the upload cap") }
-          return refusal("proof exceeds the #{max_proof_bytes} byte cap")
+        if oversized?(bytes.bytesize)
+          return { accepted: false, discard: true, note: discard_oversized(sha256, bytes.bytesize) }
         end
 
         digest = Digest::SHA256.hexdigest(bytes)
@@ -309,6 +334,29 @@ module Census
       attr_reader :check_timeout, :lease_seconds, :proofs, :store
 
       def refusal(note) = { accepted: false, note: }
+
+      def oversized?(bytes) = bytes.to_i > max_proof_bytes
+
+      # Bytes the hub may still fill before reaching its disk floor, or nil
+      # when no floor is set.
+      def room_bytes
+        return nil unless @disk_floor_bytes
+
+        free = @free_disk.call
+        free && free - @disk_floor_bytes
+      end
+
+      # Every claim naming this digest is marked too large, and every cube
+      # behind one is split. Returns the note for the worker.
+      def discard_oversized(sha256, bytes)
+        note = "proof of #{bytes} bytes exceeds the #{max_proof_bytes} byte cap"
+        splits = store.proofs_named(sha256, states: %w[claimed wanted]).map do |claim|
+          store.record_proof_too_large(id: claim[:id], note:)
+          unit = store.unit(claim[:unit_id])
+          unit && unit[:kind] == "cube" && unit[:status] != "split" ? split(unit)[:note] : nil
+        end
+        "#{note}; #{splits.compact.first || 'nothing to split'}"
+      end
 
       # Only a cube can be halved. A shape reporting `exhausted` spent its box
       # and torus budgets, which is an answer about the shape rather than a

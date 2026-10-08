@@ -90,9 +90,12 @@ module Census
         [TOO_MANY_REQUESTS, { "Content-Type" => "application/json" }, [%({"error":"slow down"}\n)]]
       end
 
+      # A JSON body over its cap is an error. A proof over its cap is not: the
+      # proof route reads one byte past the cap and lets the coordinator split
+      # the cube behind it, so the worker learns to drop the file.
       before do
         content_type :json
-        halt(PAYLOAD_TOO_LARGE, json(error: "payload too large")) if request.content_length.to_i > body_cap
+        halt(PAYLOAD_TOO_LARGE, json(error: "payload too large")) if !proof_upload? && request.content_length.to_i > MAX_BODY_BYTES
       end
 
       post "/register" do
@@ -109,7 +112,8 @@ module Census
         client_id = Integer(require_field(body, :client_id))
 
         unit = coordinator.lease(client_id:)
-        reply = { unit:, wanted_proofs: coordinator.wanted_proofs(client_id:) }
+        owed = coordinator.proofs_owed(client_id:)
+        reply = { unit:, wanted_proofs: owed[:wanted], discard_proofs: owed[:discard] }
         # No unit because the basin is full is different from no unit because
         # the queue is empty: the client should wait, not stop.
         reply[:retry_after] = coordinator.retry_after if unit.nil? && !coordinator.faucet_open?
@@ -122,9 +126,9 @@ module Census
         digest = params[:sha256].to_s
         halt(BAD_REQUEST, json(error: "malformed digest")) unless digest.match?(Coordinator::DIGEST)
 
+        # Read one byte past the cap at most: the coordinator treats an
+        # oversized upload as a cube to split, which is an answer, not an error.
         bytes = request.body.read(coordinator.max_proof_bytes + 1).to_s
-        halt(PAYLOAD_TOO_LARGE, json(error: "proof too large")) if bytes.bytesize > coordinator.max_proof_bytes
-
         json(coordinator.deliver_proof(sha256: digest, bytes:))
       end
 
@@ -174,7 +178,7 @@ module Census
 
       # JSON bodies stay small. A proof is the one thing allowed to be big, and
       # only because it cannot be anything else.
-      def body_cap = request.path.start_with?("/proof") ? coordinator.max_proof_bytes : MAX_BODY_BYTES
+      def proof_upload? = request.path.start_with?("/proof")
 
       def parse_body
         raw = request.body.read(MAX_BODY_BYTES + 1).to_s

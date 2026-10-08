@@ -87,6 +87,7 @@ module Census
           break tally["stopped"] = 1 unless lease
 
           hand_over(lease[:wanted_proofs], tally)
+          discard(lease[:discard_proofs], tally)
 
           unit = lease[:unit]
           unless unit
@@ -246,12 +247,29 @@ module Census
           answer = post_proof(sha256)
           next unless answer
 
-          tally[answer[:accepted] ? "proof delivered" : "proof refused"] += 1
+          outcome = if answer[:accepted] then "proof delivered"
+                    elsif answer[:discard] then "proof discarded"
+                    else "proof refused"
+                    end
+          tally[outcome] += 1
           report&.call("proof #{sha256[0, 12]}  #{answer[:note]}")
 
           # The coordinator holds the bytes now, written whole under the same
-          # digest, so this copy is only taking up a volunteer's disk.
-          File.delete(proof_path(sha256)) if answer[:accepted]
+          # digest, or will never take them: either way this copy is only
+          # taking up a volunteer's disk.
+          File.delete(proof_path(sha256)) if answer[:accepted] || answer[:discard]
+        end
+      end
+
+      # Proofs the coordinator has decided it will never take, usually because
+      # they were over its cap and their cube was split instead.
+      def discard(digests, tally)
+        Array(digests).each do |sha256|
+          next unless File.exist?(proof_path(sha256))
+
+          File.delete(proof_path(sha256))
+          tally["proof discarded"] += 1
+          report&.call("proof #{sha256[0, 12]}  discarded, the coordinator will not take it")
         end
       end
 

@@ -179,3 +179,40 @@ RSpec.describe Census::AtHome::Client do
     end
   end
 end
+
+RSpec.describe Census::AtHome::Client, "discarding proofs" do
+  let(:digest) { "d" * 64 }
+
+  around do |example|
+    Dir.mktmpdir do |dir|
+      @proofs = File.join(dir, "proofs")
+      @formulas = File.join(dir, "formulas")
+      example.run
+    end
+  end
+
+  it "deletes a proof the coordinator says it will never take" do
+    client = described_class.new(url: "http://127.0.0.1:1", handle: "spec", proofs: @proofs, formulas: @formulas)
+    FileUtils.mkdir_p(@proofs)
+    File.binwrite(File.join(@proofs, "#{digest}.drat"), "a\x02\x00")
+    tally = Hash.new(0)
+
+    client.discard([digest], tally)
+
+    expect(tally).to eq({ "proof discarded" => 1 })
+    expect(File).not_to exist(File.join(@proofs, "#{digest}.drat"))
+  end
+
+  it "deletes its copy when a hand-over is refused for good" do
+    client = described_class.new(url: "http://127.0.0.1:1", handle: "spec", proofs: @proofs, formulas: @formulas)
+    FileUtils.mkdir_p(@proofs)
+    File.binwrite(File.join(@proofs, "#{digest}.drat"), "a\x02\x00")
+    allow(client).to receive(:post_proof).and_return({ accepted: false, discard: true, note: "over the cap, split" })
+    tally = Hash.new(0)
+
+    client.hand_over([digest], tally)
+
+    expect(tally).to eq({ "proof discarded" => 1 })
+    expect(File).not_to exist(File.join(@proofs, "#{digest}.drat"))
+  end
+end

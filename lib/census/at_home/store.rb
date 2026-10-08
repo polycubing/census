@@ -154,14 +154,14 @@ module Census
       def wanted_proofs(client_id:)
         rows = synchronize do |connection|
           connection.exec_params(<<~SQL, [client_id])
-            SELECT proof_sha256, min(created_at) AS first_claimed FROM results
+            SELECT proof_sha256, max(proof_bytes) AS bytes, min(created_at) AS first_claimed FROM results
              WHERE client_id = $1 AND proof_state = 'wanted'
              GROUP BY proof_sha256
              ORDER BY first_claimed
           SQL
         end
 
-        rows.map { it["proof_sha256"] }
+        rows.map { { sha256: it["proof_sha256"], bytes: it["bytes"] && Integer(it["bytes"]) } }
       end
 
       # Refutations whose proof is named but not held. These are the claims
@@ -201,12 +201,15 @@ module Census
       # Every wanted result that named this digest, each with the unit whose
       # formula the proof must be checked against. The same bytes can refute
       # several cubes, and each cube is its own formula.
-      def wanted_proofs_named(sha256)
+      def wanted_proofs_named(sha256) = proofs_named(sha256, states: %w[wanted])
+
+      # Every result naming this digest whose proof is in one of the states.
+      def proofs_named(sha256, states:)
         rows = synchronize do |connection|
-          connection.exec_params(<<~SQL, [sha256])
+          connection.exec_params(<<~SQL, [sha256, PG::TextEncoder::Array.new.encode(states)])
             SELECT results.id, results.proof_bytes, results.unit_id, units.payload AS unit_payload
               FROM results JOIN units ON units.id = results.unit_id
-             WHERE results.proof_sha256 = $1 AND results.proof_state = 'wanted'
+             WHERE results.proof_sha256 = $1 AND results.proof_state = ANY($2::text[])
              ORDER BY results.id
           SQL
         end
@@ -249,6 +252,15 @@ module Census
         rows.map do |row|
           { id: Integer(row["id"]), sha256: row["proof_sha256"], bytes: row["proof_bytes"] && Integer(row["proof_bytes"]),
             path: row["proof_path"], unit_id: Integer(row["unit_id"]), unit: JSON.parse(row["unit_payload"], symbolize_names: true) }
+        end
+      end
+
+      # A claim whose proof the hub will never take counts for nothing.
+      def record_proof_too_large(id:, note:)
+        synchronize do |connection|
+          connection.exec_params(<<~SQL, [id, note])
+            UPDATE results SET verified = FALSE, proof_state = 'too_large', proof_path = NULL, checker_note = $2 WHERE id = $1
+          SQL
         end
       end
 

@@ -82,3 +82,40 @@ RSpec.describe Census::AtHome::Server, :home do
     expect(answer[:accepted]).to be(false)
   end
 end
+
+RSpec.describe Census::AtHome::Server, "proofs over the cap", :home do
+  include Rack::Test::Methods
+
+  let(:store) { Census::AtHome::Store.new }
+  let(:digest) { "d" * 64 }
+
+  def app = described_class
+
+  before do
+    store.load_schema(File.expand_path("../../../db/at_home.sql", __dir__))
+    store.reset
+    described_class.coordinator = Census::AtHome::Coordinator.new(store:, proof_policy: :every, max_proof_bytes: 4)
+  end
+
+  after { store.close }
+
+  def post_json(path, body)
+    post(path, JSON.generate(body), "CONTENT_TYPE" => "application/json")
+    JSON.parse(last_response.body, symbolize_names: true)
+  end
+
+  it "answers an upload over the cap with a split and a discard, not an error" do
+    store.add_unit(kind: "cube", shape_id: "8/1309", payload: { cnf_path: "spec/fixtures/proof/contradiction.cnf", cube: [1] })
+    worker = post_json("/register", { handle: "spec" })[:client]
+    unit = post_json("/lease", { client_id: worker[:id] })[:unit]
+    # A claim that understates its size, so the upload itself is what trips the cap.
+    post_json("/results", { unit_id: unit[:id], client_id: worker[:id], verdict: "unsat",
+                            payload: { cube: [1], proof: { sha256: digest, bytes: 2 } } })
+
+    post "/proof/#{digest}", "12345678", "CONTENT_TYPE" => "application/octet-stream"
+
+    expect(last_response.status).to eq(200)
+    expect(JSON.parse(last_response.body, symbolize_names: true)).to include(accepted: false, discard: true, note: /4 byte cap/)
+    expect(post_json("/lease", { client_id: worker[:id] })).to include(wanted_proofs: [], discard_proofs: [])
+  end
+end

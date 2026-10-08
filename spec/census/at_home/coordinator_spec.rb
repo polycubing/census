@@ -643,3 +643,70 @@ RSpec.describe Census::AtHome::Coordinator, :home do
     end
   end
 end
+
+# A proof the hub cannot take is a cube too big to carry, which is the same
+# thing as a cube too hard to solve: it splits. Eight proofs of 2.5 GB sat on
+# the colo's disk for a day, refused on every lease, because the hub only
+# said "too large" and the claims stayed wanted.
+RSpec.describe Census::AtHome::Coordinator, "proofs too large to carry", :home do
+  let(:store) { Census::AtHome::Store.new }
+  let(:contradiction) { "spec/fixtures/proof/contradiction.cnf" }
+  let(:digest) { "d" * 64 }
+
+  before do
+    store.load_schema(File.expand_path("../../../db/at_home.sql", __dir__))
+    store.reset
+  end
+
+  after { store.close }
+
+  def claim(coordinator, worker, digest:, bytes:, cube: [1])
+    store.add_unit(kind: "cube", shape_id: "8/1309", payload: { cnf_path: contradiction, cube: })
+    unit = coordinator.lease(client_id: worker[:id])
+    coordinator.submit(unit_id: unit[:id], client_id: worker[:id], verdict: "unsat",
+                       payload: { cube:, proof: { sha256: digest, bytes: } })
+  end
+
+  it "splits the cube the moment a claim names a proof over the cap, and asks the client to drop the file" do
+    capped = described_class.new(store:, proof_policy: :every, max_proof_bytes: 4)
+    worker = capped.register(handle: "spec")
+
+    answer = claim(capped, worker, digest:, bytes: 8)
+
+    expect(answer).to include(accepted: true, discard: true, note: /8 bytes.*4 byte cap.*split/)
+    expect(capped.status[:units]).to eq({ "split" => 1, "pending" => 2 })
+    expect(capped.status[:proofs]).to eq({ "too_large" => 1 })
+    expect(capped.proofs_owed(client_id: worker[:id])).to eq({ wanted: [], discard: [] })
+  end
+
+  it "repairs a claim that was wanted before the cap applied: splits it and lists the file to discard" do
+    loose = described_class.new(store:, proof_policy: :every)
+    worker = loose.register(handle: "spec")
+    claim(loose, worker, digest:, bytes: 8)
+    expect(loose.proofs_owed(client_id: worker[:id])).to eq({ wanted: [digest], discard: [] })
+
+    capped = described_class.new(store:, proof_policy: :every, max_proof_bytes: 4)
+
+    expect(capped.proofs_owed(client_id: worker[:id])).to eq({ wanted: [], discard: [digest] })
+    expect(capped.status[:units]).to eq({ "split" => 1, "pending" => 2 })
+    expect(capped.status[:proofs]).to eq({ "too_large" => 1 })
+  end
+
+  it "asks for proofs smallest first and only as far as the room above the disk floor allows, counting each upload twice" do
+    tight = described_class.new(store:, proof_policy: :every, disk_floor_bytes: 100, free_disk: -> { 1000 })
+    worker = tight.register(handle: "spec")
+    claim(tight, worker, digest: "b" * 64, bytes: 500, cube: [1])
+    claim(tight, worker, digest: "a" * 64, bytes: 300, cube: [2])
+
+    expect(tight.proofs_owed(client_id: worker[:id])).to eq({ wanted: ["a" * 64], discard: [] })
+  end
+
+  it "asks for every proof when no floor is set" do
+    loose = described_class.new(store:, proof_policy: :every)
+    worker = loose.register(handle: "spec")
+    claim(loose, worker, digest: "b" * 64, bytes: 500, cube: [1])
+    claim(loose, worker, digest: "a" * 64, bytes: 300, cube: [2])
+
+    expect(loose.wanted_proofs(client_id: worker[:id])).to eq(["a" * 64, "b" * 64])
+  end
+end
