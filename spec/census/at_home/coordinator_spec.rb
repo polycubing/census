@@ -528,6 +528,23 @@ RSpec.describe Census::AtHome::Coordinator, :home do
       expect(File).not_to exist(File.join(@proofs, "#{digest}.drat"))
     end
 
+    # The checker as a service: refills from the database while its workers
+    # run, so a proof stored mid-pass is not stuck behind the pass.
+    it "checks continuously, smallest first, until told to stop", :checker do
+      deferred = described_class.new(store:, proofs: @proofs, proof_policy: :every, check_on_delivery: false)
+      parent = seed_split
+      refute_the_child
+      deferred.deliver_proof(sha256: digest, bytes:)
+      lines = []
+      rounds = 0
+
+      deferred.check_continuously(jobs: 2, interval: 0, report: ->(line) { lines << line }, stop: -> { (rounds += 1) > 1 })
+
+      expect(lines).to eq(["verified  #{digest[0, 12]}  #{bytes.bytesize} bytes  unit 2"])
+      expect(deferred.status[:proofs]).to eq({ "verified" => 1 })
+      expect(store.unit(parent)[:status]).to eq("done")
+    end
+
     # A proof that arrived while the checker was missing is kept, not lost.
     # Once the checker exists, it gets its turn, and the parent settles.
     it "rechecks held proofs from disk once the checker is available", :checker do

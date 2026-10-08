@@ -155,6 +155,55 @@ module Census
         tally
       end
 
+      # The checker as a service: `jobs` workers take the smallest held proof
+      # not yet taken, and the pile is refilled from the database every
+      # `interval` seconds while they work. A pass-at-a-time loop let one
+      # hour-long proof hold up everything stored after the pass began. Runs
+      # until `stop` returns true, reporting each proof's outcome.
+      def check_continuously(states: ["stored"], jobs: 4, interval: 15, report: nil, stop: -> { false })
+        pile = []
+        taken = Set.new
+        lock = Mutex.new
+        ready = ConditionVariable.new
+        closed = false
+
+        workers = Array.new(jobs) do
+          Thread.new do
+            loop do
+              held = lock.synchronize do
+                ready.wait(lock) while pile.empty? && !closed
+                pile.shift
+              end
+              break unless held
+
+              label = recheck_one(held)
+              lock.synchronize { taken.delete(held[:id]) }
+              report&.call("#{label}  #{held[:sha256][0, 12]}  #{held[:bytes]} bytes  unit #{held[:unit_id]}")
+            end
+          end
+        end
+
+        loop do
+          fresh = store.held_proofs(states:)
+          lock.synchronize do
+            fresh.each do |held|
+              next if taken.include?(held[:id])
+
+              taken << held[:id]
+              pile << held
+            end
+            pile.sort_by! { it[:bytes] || Float::INFINITY }
+            ready.broadcast
+          end
+          break if stop.call
+
+          sleep(interval)
+        end
+
+        lock.synchronize { closed = true and ready.broadcast }
+        workers.each(&:join)
+      end
+
       # A held file that is not the size the claim promised is not the proof,
       # however it got that way, and is asked for again rather than checked.
       def recheck_one(held)

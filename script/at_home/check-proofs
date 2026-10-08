@@ -60,12 +60,20 @@ proofs = ENV.fetch('AT_HOME_PROOFS', Census::AtHome::Coordinator::DEFAULT_PROOFS
 timeout = Integer(ENV.fetch('AT_HOME_CHECK_TIMEOUT', Census::SAT::DratTrim::DEFAULT_TIMEOUT))
 coordinator = Census::AtHome::Coordinator.new store:, proofs:, proof_policy: policy, check_timeout: timeout
 
-loop do
-  tally = coordinator.recheck(states:, jobs:)
-  puts "#{Time.now.utc.iso8601}  checked #{tally.values.sum}: #{tally.inspect}  now #{store.proof_states.inspect}" unless tally.empty? && looping
-  break unless looping
+if looping
+  # One line per proof as it finishes, and a summary every refill.
+  last_summary = Time.now
+  report = lambda do |line|
+    puts "#{Time.now.utc.iso8601}  #{line}"
+    next if Time.now - last_summary < 60
 
-  sleep interval
+    last_summary = Time.now
+    puts "#{Time.now.utc.iso8601}  now #{store.proof_states.inspect}"
+  end
+  coordinator.check_continuously(states:, jobs:, interval:, report:)
+else
+  tally = coordinator.recheck(states:, jobs:)
+  puts "checked #{tally.values.sum}: #{tally.inspect}  now #{store.proof_states.inspect}"
 end
 
 store.close
