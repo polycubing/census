@@ -35,20 +35,35 @@ module Census
       reach = shape.cells.transpose.map { it.max - it.min }.max
       window_low = low.map { it - reach }
       window_high = high.map { it + reach }
-      chunk = []
-      coefficients = (-6..6).to_a
-      coefficients.product(coefficients, coefficients) do |a, b, c|
-        shift = (0..2).map { (a * basis[0][it]) + (b * basis[1][it]) + (c * basis[2][it]) }
-        next unless shift.zip(window_low, window_high).all? { |value, from, to| value.between?(from - reach, to) }
-
-        copies.each do |cells|
-          moved = translate(cells, shift)
-          chunk << moved if moved.all? { |cell| cell.zip(window_low, window_high).all? { |value, from, to| value.between?(from, to) } }
-        end
+      chunk = copies.flat_map do |cells|
+        copy_low, copy_high = bounds(cells)
+        from = window_low.zip(copy_low).map { |window, copy| window - copy }
+        to = window_high.zip(copy_high).map { |window, copy| window - copy }
+        shifts_within(basis, from, to).map { translate(cells, it) }
       end
       assert_solid(chunk, low, high)
       name_groups(chunk)
     end
+
+    # Every lattice vector a*basis[0] + b*basis[1] + c*basis[2] whose
+    # coordinates lie in [from, to], solved axis by axis. The basis is in
+    # lower-triangular Hermite normal form, so z fixes c, then y fixes b,
+    # then x fixes a.
+    def self.shifts_within(basis, from, to)
+      (p, _, _), (q, r, _), (s, t, u) = basis
+      raise ArgumentError, "lattice basis is not lower triangular: #{basis.inspect}" unless [basis[0][1], basis[0][2], basis[1][2]].all?(&:zero?)
+
+      coefficients_between(from[2], to[2], u).flat_map do |c|
+        coefficients_between(from[1] - (c * t), to[1] - (c * t), r).flat_map do |b|
+          coefficients_between(from[0] - (b * q) - (c * s), to[0] - (b * q) - (c * s), p).map do |a|
+            [(a * p) + (b * q) + (c * s), (b * r) + (c * t), c * u]
+          end
+        end
+      end
+    end
+
+    # The integers k with from <= k * step <= to, for a positive step.
+    def self.coefficients_between(from, to, step) = (Rational(from, step).ceil..Rational(to, step).floor).to_a
 
     def self.lattice_shifts(basis)
       [0, 1].product([0, 1], [0, 1]).map do |a, b, c|
