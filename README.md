@@ -49,6 +49,39 @@ data/
 
 Indices are assigned once, by lexicographic order of canonical forms, and never renumbered — `6/122` is a citable name whose ID is literally its path. Records carry the shape's geometry (canonical cells, symmetry order, chirality, a link to its mirror twin) and its verdict fields, which fill in as the pipeline runs. Meshes (`model.stl`, tiling and corona assemblies) are generated from certificates and land beside each record.
 
+### Rotations
+
+A tiling certificate lists its copies as `placements`, each an `offset` and a `rotation`. The rotation is a number from 0 to 23 indexing the table below, which is every proper rotation of the cube (no reflections) in the order the code generates them. Read a row as a recipe for new coordinates: rotation 13 says `new x = y, new y = -z, new z = -x`, so the cell `(0, 0, 1)` lands at `(0, -1, 0)`. After rotating, the copy is slid so its minimum corner sits at the origin, and only then is the offset added. The last column is the same turn described as an axis and an angle, right-handed about the axis. `script/rotations` prints this table from the code, and a spec keeps this copy equal to it.
+
+| rotation | new x | new y | new z | turn |
+|---:|---|---|---|---|
+| 0 | x | y | z | identity |
+| 1 | x | -y | -z | 180° about +x |
+| 2 | -x | y | -z | 180° about +y |
+| 3 | -x | -y | z | 180° about +z |
+| 4 | x | z | -y | 90° about -x |
+| 5 | x | -z | y | 90° about +x |
+| 6 | -x | z | y | 180° about +y+z |
+| 7 | -x | -z | -y | 180° about +y-z |
+| 8 | y | x | -z | 180° about +x+y |
+| 9 | y | -x | z | 90° about -z |
+| 10 | -y | x | z | 90° about +z |
+| 11 | -y | -x | -z | 180° about +x-y |
+| 12 | y | z | x | 120° about -x-y-z |
+| 13 | y | -z | -x | 120° about +x+y-z |
+| 14 | -y | z | -x | 120° about -x+y+z |
+| 15 | -y | -z | x | 120° about +x-y+z |
+| 16 | z | x | y | 120° about +x+y+z |
+| 17 | z | -x | -y | 120° about -x+y-z |
+| 18 | -z | x | -y | 120° about -x-y+z |
+| 19 | -z | -x | y | 120° about +x-y-z |
+| 20 | z | y | -x | 90° about +y |
+| 21 | z | -y | x | 180° about +x+z |
+| 22 | -z | y | x | 90° about -y |
+| 23 | -z | -y | -x | 180° about +x-z |
+
+### Artifacts
+
 Formulas and proofs too big for GitHub live in a public S3 bucket, listed in [`data/artifacts.json`](data/artifacts.json) with a URL and checksums for the raw and compressed bytes. To recheck a refutation yourself: download the formula and the proof from the manifest's URLs, `xz -d` both, confirm each `sha256`, then run `drat-trim formula proof` and look for `s VERIFIED`. No account and no trust in us at any step. `script/verify --artifacts` does the checksum half for whatever artifacts are on your disk.
 
 ## Status

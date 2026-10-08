@@ -1,0 +1,26 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# The 24 rotations as a markdown table, in the order certificates number
+# them. README.md carries a copy; a spec keeps the two the same.
+#
+#   script/rotations
+
+require_relative "../lib/census"
+
+def turn(rotation)
+  return "identity" if rotation.angle.zero?
+
+  axis = rotation.axis.each_with_index.filter_map do |value, index|
+    next if value.zero?
+
+    "#{value.negative? ? '-' : '+'}#{Census::Rotation::AXIS_NAMES[index]}"
+  end
+  "#{rotation.angle}° about #{axis.join}"
+end
+
+puts "| rotation | new x | new y | new z | turn |"
+puts "|---:|---|---|---|---|"
+Census::Rotation.all.each_with_index do |rotation, index|
+  puts "| #{index} | #{rotation.images.join(' | ')} | #{turn(rotation)} |"
+end
