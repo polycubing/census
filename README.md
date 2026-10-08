@@ -47,7 +47,7 @@ data/
   9/48311/shape.json
 ```
 
-Indices are assigned once, by lexicographic order of canonical forms, and never renumbered — `6/122` is a citable name whose ID is literally its path. Records carry the shape's geometry (canonical cells, symmetry order, chirality, a link to its mirror twin) and its verdict fields, which fill in as the pipeline runs. Meshes (`model.stl`, tiling and corona assemblies) are generated from certificates and land beside each record.
+Indices are assigned once, by lexicographic order of canonical forms, and never renumbered — `6/122` is a citable name whose ID is literally its path. Records carry the shape's geometry (canonical cells, symmetry order, chirality, a link to its mirror twin) and its verdict fields, which fill in as the pipeline runs. Meshes are generated from certificates by `script/gallery` and land beside each record: `model.stl` and corona assemblies stay in git, while the tiling chunks (`tiling.obj`, about 22 GB across the torus tilers) are published to S3 by `script/publish-meshes` and linked from each shape's page.
 
 ### Rotations
 

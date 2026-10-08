@@ -1,0 +1,36 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Publish the tiling chunks (tiling.obj and tiling.mtl beside every tiler's
+# record) to S3, where the site links them from each shape's downloads.
+#
+# Usage: script/publish-meshes [--dry-run]
+#
+# Mirrors data/<n>/<i>/tiling.{obj,mtl} to s3://polycubes/public/meshes/<n>/<i>/
+# with `aws s3 sync`, which uploads only files whose size or time changed,
+# so a rerun after regenerating a few shapes is cheap. The URL of a chunk is
+# https://polycubes.s3.us-west-2.amazonaws.com/public/meshes/<n>/<i>/tiling.obj
+#
+# Runs as the `polycubes` AWS profile, the IAM user polycubes-laptop, whose
+# only power is reading and writing public/ in this one bucket
+# (config/iam-laptop-policy.json). Only the laptop does this.
+
+ENV["AWS_PROFILE"] ||= "polycubes"
+BUCKET = "polycubes"
+
+dry_running = ARGV.delete("--dry-run")
+abort "usage: script/publish-meshes [--dry-run]" unless ARGV.empty?
+
+root = File.expand_path("../data", __dir__)
+
+# One sync per extension so each gets its own content type.
+{ "obj" => "model/obj", "mtl" => "model/mtl" }.each do |extension, content_type|
+  command = ["aws", "s3", "sync", root, "s3://#{BUCKET}/public/meshes",
+             "--exclude", "*", "--include", "*/tiling.#{extension}",
+             "--content-type", content_type, "--only-show-errors"]
+  command << "--dryrun" if dry_running
+  puts command.join(" ")
+  system(*command, exception: true)
+end
+
+puts "meshes published"

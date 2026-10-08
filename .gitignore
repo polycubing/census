@@ -12,6 +12,13 @@ whitepapers--readlater/
 # script/publish-artifacts on their way to S3. The manifest tracks them.
 data/**/*.xz
 
+# Tiling chunks, 22 GB of generated OBJ across the torus tilers. Written
+# beside each record by script/gallery, published to S3 by
+# script/publish-meshes, linked from the site. The records and model.stl
+# stay in git.
+data/**/tiling.obj
+data/**/tiling.mtl
+
 # SAT artifacts over GitHub's 100 MB cap — destined for S3, linked from .md files
 data/9/2127/cnf/
 data/9/8219/cnf/
