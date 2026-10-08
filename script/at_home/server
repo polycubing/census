@@ -33,6 +33,14 @@
 #                             own process, instead of checking inside the
 #                             request. A campaign's large proofs need this
 #                               default: check on delivery
+#   --basin-high-gb GB        close the faucet (lease nothing) when stored
+#                             plus wanted proof bytes pass this
+#                               default: $AT_HOME_BASIN_HIGH_GB, or no limit
+#   --basin-low-gb GB         reopen it below this
+#                               default: $AT_HOME_BASIN_LOW_GB, or the high mark
+#   --disk-floor-gb GB        close it when the proof directory's disk has
+#                             less free than this
+#                               default: $AT_HOME_DISK_FLOOR_GB, or no limit
 #   --throttle-limit N        requests one IP may make per minute. Fifty
 #                             clients on the coordinator's own machine are
 #                             one IP, so a campaign there raises this
@@ -82,6 +90,10 @@ ENV['AT_HOME_PROOF_POLICY']    = option arguments, '--proof-policy',    ENV.fetc
 ENV['AT_HOME_MAX_PROOF_BYTES'] = option arguments, '--max-proof-bytes', ENV.fetch('AT_HOME_MAX_PROOF_BYTES', (100 * 1024 * 1024).to_s)
 ENV['AT_HOME_CHECK_TIMEOUT']   = option arguments, '--check-timeout',   ENV.fetch('AT_HOME_CHECK_TIMEOUT', '300')
 ENV['AT_HOME_THROTTLE_LIMIT']  = option arguments, '--throttle-limit',  ENV.fetch('AT_HOME_THROTTLE_LIMIT', '120')
+%w[basin-high-gb basin-low-gb disk-floor-gb].each do |flag|
+  value = option arguments, "--#{flag}", nil
+  ENV["AT_HOME_#{flag.upcase.tr('-', '_')}"] = value if value
+end
 
 # Check options
 check_for_unknown_options arguments

@@ -37,7 +37,13 @@
 #   --proofs DIR              where to keep DRAT refutations, named by their
 #                             own digest, so one can be handed over on request
 #                               default: proofs/
+#   --disk-floor-gb GB        take no new work while this disk has less free
+#                             than this. Your limit, which the coordinator
+#                             cannot know for you
+#                               default: none
 #   --once                    stop when the queue is empty rather than waiting
+#                             (a coordinator asking for a pause is not an
+#                             empty queue, and is waited out)
 #
 # The client holds no census state.
 # It leases a unit, solves it locally, then returns the answer to the server.
@@ -116,10 +122,13 @@ proofs         = option arguments, '--proofs',        default_proofs
 limit          = option(arguments, '--limit',         nil)&.then { Integer(it) }
 give_up_after  = option(arguments, '--give-up-after', nil)&.then { Integer(it) }
 cube_timeout   = option(arguments, '--cube-timeout',  default_cube_timeout).then { Integer(it) }
+disk_floor_gb  = option(arguments, '--disk-floor-gb', nil)&.then { Float(it) }
 once           = flag?  arguments, '--once'
 
 # Check options
 check_for_unknown_options arguments
+
+disk_floor_bytes = disk_floor_gb && (disk_floor_gb * 1_000_000_000).to_i
 
 client = Census::AtHome::Client.new url:,
                                     handle:,
@@ -127,6 +136,7 @@ client = Census::AtHome::Client.new url:,
                                     contact:,
                                     give_up_after:,
                                     cube_timeout:,
+                                    disk_floor_bytes:,
                                     formulas:,
                                     proofs:,
                                     report: reporter

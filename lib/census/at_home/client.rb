@@ -46,7 +46,7 @@ module Census
       DEFAULT_CUBE_TIMEOUT = 3600
 
       def initialize(url:, handle:, display_name: nil, contact: nil, report: nil, give_up_after: nil,
-                     proofs: DEFAULT_PROOFS, formulas: DEFAULT_FORMULAS, cube_timeout: DEFAULT_CUBE_TIMEOUT)
+                     proofs: DEFAULT_PROOFS, formulas: DEFAULT_FORMULAS, cube_timeout: DEFAULT_CUBE_TIMEOUT, disk_floor_bytes: nil)
         @base = URI(url)
         @handle = handle
         @display_name = display_name
@@ -56,6 +56,7 @@ module Census
         @proofs = proofs
         @formulas = formulas
         @cube_timeout = cube_timeout
+        @disk_floor_bytes = disk_floor_bytes
         @client_id = nil
       end
 
@@ -73,6 +74,15 @@ module Census
         return tally.merge("stopped" => 1) unless client_id
 
         loop do
+          # The volunteer's own limit: no new work while its disk is under
+          # the floor it set. Nothing the hub can know for it.
+          if disk_floor_bytes && (free = Disk.free_bytes(File.exist?(proofs) ? proofs : File.dirname(File.expand_path(proofs)))) &&
+             free < disk_floor_bytes
+            report&.call("own disk has #{free / 1_000_000} MB free, under the floor, waiting")
+            sleep(idle_sleep * 6)
+            next
+          end
+
           lease = post("/lease", { client_id: })
           break tally["stopped"] = 1 unless lease
 
@@ -80,6 +90,14 @@ module Census
 
           unit = lease[:unit]
           unless unit
+            # The coordinator's basin is full. Work remains, so wait as told,
+            # even under --once.
+            if lease[:retry_after]
+              report&.call("coordinator asks for a #{lease[:retry_after]}s pause")
+              sleep(lease[:retry_after])
+              next
+            end
+
             break if once
 
             report&.call("no work available")
@@ -110,7 +128,7 @@ module Census
 
       private
 
-      attr_reader :base, :client_id, :contact, :cube_timeout, :display_name, :formulas, :give_up_after,
+      attr_reader :base, :client_id, :contact, :cube_timeout, :disk_floor_bytes, :display_name, :formulas, :give_up_after,
                   :handle, :proofs, :report
 
       # A solver that dies (a full disk, a kill, a bad build) is reported as

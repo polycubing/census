@@ -108,7 +108,12 @@ module Census
         body = parse_body
         client_id = Integer(require_field(body, :client_id))
 
-        json(unit: coordinator.lease(client_id:), wanted_proofs: coordinator.wanted_proofs(client_id:))
+        unit = coordinator.lease(client_id:)
+        reply = { unit:, wanted_proofs: coordinator.wanted_proofs(client_id:) }
+        # No unit because the basin is full is different from no unit because
+        # the queue is empty: the client should wait, not stop.
+        reply[:retry_after] = coordinator.retry_after if unit.nil? && !coordinator.faucet_open?
+        json(reply)
       end
 
       # Proof bytes, not JSON. A DRAT proof is binary and runs to megabytes, so

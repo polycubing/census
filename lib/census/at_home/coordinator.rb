@@ -34,14 +34,25 @@ module Census
 
       attr_reader :max_proof_bytes, :proof_policy
 
+      # How long a client is told to wait when the faucet is closed.
+      RETRY_AFTER = 60
+
       # check_on_delivery: whether a delivered proof is checked inside the
       # request. Right for a spike and wrong for a campaign, where one 700 MB
       # proof holds a server thread for many minutes and every client's
       # request times out behind it. Off, delivery stores the bytes and
       # returns, and script/at_home/check-proofs verifies them in its own
       # process, several at a time.
+      #
+      # basin_high_bytes / basin_low_bytes: the faucet closes when the bytes
+      # of proof held or expected pass the high mark and reopens below the
+      # low mark, so the level oscillates in a band instead of overflowing.
+      # disk_floor_bytes: closes it regardless when the proof directory's
+      # filesystem has less free than this. nil for any of them means no
+      # limit, which is the spike's behaviour and filled a disk twice.
       def initialize(store:, lease_seconds: 900, proofs: DEFAULT_PROOFS, proof_policy: :on_request,
-                     max_proof_bytes: MAX_PROOF_BYTES, check_timeout: SAT::DratTrim::DEFAULT_TIMEOUT, check_on_delivery: true)
+                     max_proof_bytes: MAX_PROOF_BYTES, check_timeout: SAT::DratTrim::DEFAULT_TIMEOUT, check_on_delivery: true,
+                     basin_high_bytes: nil, basin_low_bytes: nil, disk_floor_bytes: nil, free_disk: nil)
         raise ArgumentError, "proof_policy must be one of #{PROOF_POLICIES.inspect}" unless PROOF_POLICIES.include?(proof_policy)
 
         @store = store
@@ -51,13 +62,43 @@ module Census
         @max_proof_bytes = max_proof_bytes
         @check_timeout = check_timeout
         @check_on_delivery = check_on_delivery
+        @basin_high_bytes = basin_high_bytes
+        @basin_low_bytes = basin_low_bytes || basin_high_bytes
+        @disk_floor_bytes = disk_floor_bytes
+        @free_disk = free_disk || -> { Disk.free_bytes(proofs) }
+        @faucet_closed = false
       end
 
       def every_proof? = proof_policy == :every
 
+      # The basin's level and whether the faucet is open, for status and for
+      # lease. Hysteresis: once closed by the high mark it stays closed until
+      # the low mark, so a level hovering at the mark does not flap.
+      def basin
+        bytes = store.basin_bytes
+        free = @free_disk.call
+        reasons = []
+        if @basin_high_bytes
+          # Closed by the high mark, it stays closed until the low mark.
+          @faucet_closed = @faucet_closed ? bytes > @basin_low_bytes : bytes >= @basin_high_bytes
+          reasons << "basin #{bytes} bytes, high mark #{@basin_high_bytes}, reopens at #{@basin_low_bytes}" if @faucet_closed
+        end
+        reasons << "free disk #{free} bytes under the #{@disk_floor_bytes} floor" if @disk_floor_bytes && free && free < @disk_floor_bytes
+        { bytes:, high: @basin_high_bytes, low: @basin_low_bytes, free_disk: free, floor: @disk_floor_bytes,
+          faucet: reasons.empty? ? "open" : "closed", reasons: }
+      end
+
+      def faucet_open? = basin[:faucet] == "open"
+
+      def retry_after = RETRY_AFTER
+
       def register(handle:, display_name: nil, contact: nil) = store.register_client(handle:, display_name:, contact:)
 
+      # No unit while the faucet is closed: handing out work whose result
+      # the hub cannot take is how the disk filled.
       def lease(client_id:)
+        return nil unless faucet_open?
+
         unit = store.lease_unit(client_id:, seconds: lease_seconds)
         return nil unless unit
 
@@ -106,7 +147,7 @@ module Census
         { accepted:, note: rolled ? "#{note}, and it settled #{rolled}" : note }
       end
 
-      def status = store.status.merge(proofs: store.proof_states)
+      def status = store.status.merge(proofs: store.proof_states, basin:)
 
       # Ask for a claimed proof. Nothing arrives unasked, so an upload nobody
       # requested has nowhere to land.

@@ -29,7 +29,15 @@ check_timeout = Integer(ENV.fetch("AT_HOME_CHECK_TIMEOUT", Census::SAT::DratTrim
 # AT_HOME_DEFER_CHECKS=1 stores delivered proofs for script/at_home/check-proofs
 # to verify in its own process, instead of checking inside the request.
 check_on_delivery = ENV.fetch("AT_HOME_DEFER_CHECKS", "0") != "1"
+# The basin: the faucet closes when held-plus-expected proof bytes pass the
+# high mark or free disk under the proof directory drops below the floor, and
+# reopens below the low mark. Gigabytes. Unset means no limit.
+gigabytes = ->(name) { ENV[name] && (Float(ENV[name]) * 1_000_000_000).to_i }
+basin_high_bytes = gigabytes.call("AT_HOME_BASIN_HIGH_GB")
+basin_low_bytes = gigabytes.call("AT_HOME_BASIN_LOW_GB")
+disk_floor_bytes = gigabytes.call("AT_HOME_DISK_FLOOR_GB")
 Census::AtHome::Server.coordinator = Census::AtHome::Coordinator.new(store:, proofs:, proof_policy:, max_proof_bytes:,
-                                                                     check_timeout:, check_on_delivery:)
+                                                                     check_timeout:, check_on_delivery:,
+                                                                     basin_high_bytes:, basin_low_bytes:, disk_floor_bytes:)
 
 run Census::AtHome::Server

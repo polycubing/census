@@ -18,8 +18,8 @@ On 2026-10-07 the faucet ran with no knowledge of the basin. Eight clients produ
 
 ## The pieces, in the order to build them
 
-1. **Backpressure at the faucet.** `/lease` answers "nothing now, back off N seconds" when stored bytes exceed a high-water mark or free disk under the proof directory is below a floor, and resumes below a low-water mark. Clients already sleep on an empty lease, so no client change is needed. Small, and it would have prevented both disk-full outages. Do first.
-2. **Volunteer self-limits.** Client flags for a local free-disk floor and a time cap, and the rule that it holds one artifact and deletes it on confirmed receipt (the deletion is done). Small.
+1. **Backpressure at the faucet.** Done 2026-10-08. `/lease` answers no unit plus `retry_after` when stored-plus-wanted bytes exceed `--basin-high-gb` or free disk under the proof directory is below `--disk-floor-gb`, and resumes below `--basin-low-gb`. The client waits what it is told, even under `--once`. `status` shows the basin and why the faucet is closed.
+2. **Volunteer self-limits.** Mostly done 2026-10-08: `--disk-floor-gb` on the client, one artifact at a time, deletion on confirmed receipt. Still to do: a time cap per unit beyond `--cube-timeout`.
 3. **Checkers that pull.** A checker fetches a stored proof from the hub over HTTP, the way clients fetch formulas, checks it against the formula it rebuilds, and posts the verdict. Then the laptop, with its disk and bandwidth, is a checker, the colo is a checker, and the hub needs only enough disk to hold a proof between its arrival and the next checker's pull. This replaces the drain-by-rsync. Medium, and it is the change that makes the hub's disk stop mattering.
 4. **Declared limits and size-aware dispatch.** A volunteer registers with what it has, and the hub shapes what it sends: no monster cube to a laptop with 10 GB free. The August ledgers already say which cubes were monsters. BOINC's model, for when strangers exist, which is n=10.
 

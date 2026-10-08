@@ -267,6 +267,15 @@ module Census
         end
       end
 
+      # Bytes of proof the hub is holding or about to receive: stored (waiting
+      # on the checker) and wanted (on a volunteer's disk, coming). The basin.
+      def basin_bytes
+        synchronize do |connection|
+          row = connection.exec("SELECT coalesce(sum(proof_bytes), 0) AS bytes FROM results WHERE proof_state IN ('stored', 'wanted')").first
+          Integer(row["bytes"])
+        end
+      end
+
       def close_unit(id:, status:)
         synchronize do |connection|
           connection.exec_params("UPDATE units SET status = $2, lease_client = NULL, lease_until = NULL WHERE id = $1", [id, status])

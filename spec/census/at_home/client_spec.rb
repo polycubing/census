@@ -43,6 +43,34 @@ RSpec.describe Census::AtHome::Client do
     expect(notes.last).to match(/UNREPORTED/)
   end
 
+  # A coordinator whose basin is full says so with retry_after. That is a
+  # pause, not an empty queue, so even --once waits it out.
+  it "waits as long as the coordinator asks when the faucet is closed" do
+    client = described_class.new(url: dead_url, handle: "spec")
+    allow(client).to receive(:post).and_return({ client: { id: 1 } }, { unit: nil, retry_after: 7 }, { unit: nil })
+    allow(client).to receive(:sleep)
+    notes = []
+    client.instance_variable_set(:@report, ->(line) { notes << line })
+
+    client.run(once: true)
+
+    expect(client).to have_received(:sleep).with(7).once
+    expect(notes).to include("coordinator asks for a 7s pause")
+  end
+
+  it "takes no work while its own disk is under the floor it was given" do
+    client = described_class.new(url: dead_url, handle: "spec", disk_floor_bytes: 10**18)
+    allow(client).to receive(:post).and_return({ client: { id: 1 } })
+    allow(client).to receive(:sleep) { throw :waited }
+    notes = []
+    client.instance_variable_set(:@report, ->(line) { notes << line })
+
+    catch(:waited) { client.run(once: true) }
+
+    expect(notes.last).to match(/own disk has \d+ MB free, under the floor, waiting/)
+    expect(client).to have_received(:post).once
+  end
+
   # Ten of twelve clients once died in the same minute because kissat could
   # not flush a proof to a full disk. A dead solver is a unit to hand back,
   # not a reason to stop volunteering.

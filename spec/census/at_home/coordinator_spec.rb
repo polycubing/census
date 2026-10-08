@@ -545,6 +545,60 @@ RSpec.describe Census::AtHome::Coordinator, :home do
       expect(store.unit(parent)[:status]).to eq("done")
     end
 
+    # The bathtub. The faucet closes when held-plus-expected proof bytes pass
+    # the high mark and reopens below the low mark, and closes regardless
+    # when the disk is nearly full. This is the control whose absence filled
+    # a disk twice on the first campaign day.
+    describe "the faucet" do
+      def seed_two_leaves
+        parent = store.add_unit(kind: "cube", shape_id: "8/1309", payload: { cnf_path: contradiction, cube: [] })
+        store.close_unit(id: parent, status: "split")
+        [[1], [-1]].each { store.add_unit(kind: "cube", shape_id: "8/1309", parent_id: parent, payload: { cnf_path: contradiction, cube: it }) }
+      end
+
+      def claim(hub, worker, cube)
+        unit = hub.lease(client_id: worker[:id])
+        hub.submit(unit_id: unit[:id], client_id: worker[:id], verdict: "unsat", payload: { cube:, proof: { sha256: digest, bytes: bytes.bytesize } })
+      end
+
+      it "closes above the high mark and reopens below the low mark", :checker do
+        hub = described_class.new(store:, proofs: @proofs, proof_policy: :every, check_on_delivery: false,
+                                  basin_high_bytes: bytes.bytesize + 1, basin_low_bytes: 1)
+        seed_two_leaves
+        worker = hub.register(handle: "spec")
+
+        claim(hub, worker, [1])
+        expect(hub.basin).to include(faucet: "open")
+        claim(hub, worker, [-1])
+        expect(hub.basin).to include(faucet: "closed", bytes: 2 * bytes.bytesize)
+        expect(hub.lease(client_id: worker[:id])).to be_nil
+
+        hub.deliver_proof(sha256: digest, bytes:)
+        hub.recheck(states: ["stored"])
+        expect(hub.basin).to include(faucet: "open", bytes: 0)
+      end
+
+      it "closes when the disk under the proofs is below the floor, whatever the basin holds" do
+        free = 1_000
+        hub = described_class.new(store:, proofs: @proofs, disk_floor_bytes: 5_000, free_disk: -> { free })
+        seed_two_leaves
+        worker = hub.register(handle: "spec")
+
+        expect(hub.lease(client_id: worker[:id])).to be_nil
+        expect(hub.basin[:reasons].first).to match(/free disk 1000 bytes under the 5000 floor/)
+
+        free = 10_000
+        expect(hub.lease(client_id: worker[:id])).not_to be_nil
+      end
+
+      it "leases freely with no marks set" do
+        seed_two_leaves
+        worker = coordinator.register(handle: "spec")
+        expect(coordinator.lease(client_id: worker[:id])).not_to be_nil
+        expect(coordinator.basin).to include(faucet: "open", high: nil, floor: nil)
+      end
+    end
+
     # A proof that arrived while the checker was missing is kept, not lost.
     # Once the checker exists, it gets its turn, and the parent settles.
     it "rechecks held proofs from disk once the checker is available", :checker do
