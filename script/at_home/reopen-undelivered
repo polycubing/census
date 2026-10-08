@@ -33,13 +33,13 @@ older_than = Integer(option(arguments, '--older-than', 3600))
 abort "unknown argument(s): #{arguments.join ' '}" unless arguments.empty?
 
 store = Census::AtHome::Store.new
-stuck = store.undelivered_proofs older_than:
+stuck = store.undelivered_proofs(older_than:)
 puts "#{stuck.size} proof(s) wanted for more than #{older_than}s and never delivered"
 stuck.each { puts "  result #{it[:id]}  unit #{it[:unit_id]} (#{it[:unit_status]})  proof #{it[:sha256][0, 12]}" }
 
 unless dry_running || stuck.empty?
-  coordinator = Census::AtHome::Coordinator.new store:
-  reopened = coordinator.reopen_undelivered older_than:
+  coordinator = Census::AtHome::Coordinator.new(store:)
+  reopened = coordinator.reopen_undelivered(older_than:)
   puts "reopened units #{reopened.inspect}"
   puts store.status[:units].inspect
 end
