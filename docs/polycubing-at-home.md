@@ -69,6 +69,8 @@ Domain risks are handled where the domain lives, because no framework knows what
 
 ## Not built yet (deliberate spike boundaries)
 
+- **Flow control.** The hub hands out work without knowing whether it can take the results, and the first real campaign filled a disk twice because of it. The design and build order are in [at-home-flow.md](at-home-flow.md).
+
 - **A sampling policy.** Two proof policies exist: `on_request` (a human calls `want_proof`, via `script/at_home/audit`) and `every` (each proof is asked for as it is claimed, checked on arrival, and parents settle only on checked proofs). What is still missing is the middle: a random sample plus every headline claim, at a rate tuned against real traffic rather than invented before any volunteer exists. `every` is right for a campaign that must end in a theorem and wrong for a sweep of 346,543 shapes.
 - **Oversized proofs.** The default upload cap is 100 MB, GitHub's blob limit. A campaign whose proofs go to S3 raises it with `--max-proof-bytes`. There is no streaming upload, so a proof still has to fit in memory on both ends.
 - **Better branching.** Splitting works: a cube nobody finishes in time is halved on the lowest variable it does not already fix, and a half too hard is halved again. That is sound, because `v` and `not v` cover every assignment, but it is not clever. A lookahead solver like march picks a variable that divides the work evenly instead, which is what the n=9 campaign used by hand. Worth measuring before it matters at scale.
