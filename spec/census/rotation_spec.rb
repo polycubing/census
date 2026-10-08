@@ -57,3 +57,11 @@ RSpec.describe Census::Rotation, "as a human reads it" do
     expect(counts).to eq({ [0, 0] => 1, [90, 1] => 6, [180, 1] => 3, [180, 2] => 6, [120, 3] => 8 })
   end
 end
+
+RSpec.describe Census::Rotation, "#turn" do
+  it "says the turn in words" do
+    turns = described_class.all.map(&:turn)
+    expect(turns.values_at(0, 4, 13)).to eq(["identity", "90° about -x", "120° about +x+y-z"])
+    expect(turns.uniq.size).to eq(24)
+  end
+end

@@ -55,6 +55,18 @@ module Census
       vector.map { it / largest }
     end
 
+    # The turn in words: "identity", "90° about -x", "120° about +x+y-z".
+    def turn
+      return "identity" if angle.zero?
+
+      about = axis.each_with_index.filter_map do |value, index|
+        next if value.zero?
+
+        "#{value.negative? ? '-' : '+'}#{AXIS_NAMES[index]}"
+      end
+      "#{angle}° about #{about.join}"
+    end
+
     private
 
     def matrix = (0..2).map { |row| (0..2).map { |column| column == axes[row] ? signs[row] : 0 } }

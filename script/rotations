@@ -8,19 +8,8 @@
 
 require_relative "../lib/census"
 
-def turn(rotation)
-  return "identity" if rotation.angle.zero?
-
-  axis = rotation.axis.each_with_index.filter_map do |value, index|
-    next if value.zero?
-
-    "#{value.negative? ? '-' : '+'}#{Census::Rotation::AXIS_NAMES[index]}"
-  end
-  "#{rotation.angle}° about #{axis.join}"
-end
-
 puts "| rotation | new x | new y | new z | turn |"
 puts "|---:|---|---|---|---|"
 Census::Rotation.all.each_with_index do |rotation, index|
-  puts "| #{index} | #{rotation.images.join(' | ')} | #{turn(rotation)} |"
+  puts "| #{index} | #{rotation.images.join(' | ')} | #{rotation.turn} |"
 end
