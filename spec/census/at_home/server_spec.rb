@@ -116,6 +116,6 @@ RSpec.describe Census::AtHome::Server, "proofs over the cap", :home do
 
     expect(last_response.status).to eq(200)
     expect(JSON.parse(last_response.body, symbolize_names: true)).to include(accepted: false, discard: true, note: /4 byte cap/)
-    expect(post_json("/lease", { client_id: worker[:id] })).to include(wanted_proofs: [], discard_proofs: [])
+    expect(post_json("/lease", { client_id: worker[:id] })).to include(wanted_proofs: [], discard_proofs: [digest])
   end
 end

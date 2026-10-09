@@ -676,7 +676,8 @@ RSpec.describe Census::AtHome::Coordinator, "proofs too large to carry", :home d
     expect(answer).to include(accepted: true, discard: true, note: /8 bytes.*4 byte cap.*split/)
     expect(capped.status[:units]).to eq({ "split" => 1, "pending" => 2 })
     expect(capped.status[:proofs]).to eq({ "too_large" => 1 })
-    expect(capped.proofs_owed(client_id: worker[:id])).to eq({ wanted: [], discard: [] })
+    # Listed on every lease from now on, in case the answer above was missed.
+    expect(capped.proofs_owed(client_id: worker[:id])).to eq({ wanted: [], discard: [digest] })
   end
 
   it "repairs a claim that was wanted before the cap applied: splits it and lists the file to discard" do

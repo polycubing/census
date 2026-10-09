@@ -118,6 +118,10 @@ module Census
           tally[answer[:accepted] ? "accepted" : "rejected"] += 1
           tally[verdict] += 1
           report&.call("#{unit[:shape_id]}  #{verdict}  #{answer[:accepted] ? 'accepted' : "REJECTED (#{answer[:note]})"}  #{seconds}s")
+          # A proof the coordinator will never ask for (over its cap, the
+          # cube was split instead) would otherwise sit here until the disk
+          # fills, which it did: 35 GB of them on the colo.
+          forget(payload.dig(:proof, :sha256)) if answer[:discard] && payload.dig(:proof, :sha256)
           break if limit && tally["accepted"] + tally["rejected"] >= limit
 
           # Whatever killed the solver (a full disk, usually) is probably

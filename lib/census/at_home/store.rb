@@ -201,6 +201,19 @@ module Census
       # Every wanted result that named this digest, each with the unit whose
       # formula the proof must be checked against. The same bytes can refute
       # several cubes, and each cube is its own formula.
+      # Digests of this client's claims the hub refused as too large, which
+      # the client should not keep.
+      def too_large_proofs(client_id:)
+        rows = synchronize do |connection|
+          connection.exec_params(<<~SQL, [client_id])
+            SELECT DISTINCT proof_sha256 FROM results
+             WHERE client_id = $1 AND proof_state = 'too_large' AND proof_sha256 IS NOT NULL
+             ORDER BY proof_sha256
+          SQL
+        end
+        rows.map { it["proof_sha256"] }
+      end
+
       def wanted_proofs_named(sha256) = proofs_named(sha256, states: %w[wanted])
 
       # Every result naming this digest whose proof is in one of the states.

@@ -176,7 +176,11 @@ module Census
           room -= needed
           proof[:sha256]
         end
-        { wanted:, discard: oversized.map { it[:sha256] } }
+        # Every claim of this client's that was ever too large is listed, not
+        # only the ones split just now: a client that missed the answer to
+        # its submission still holds the file, and dropping a file already
+        # gone costs nothing.
+        { wanted:, discard: (oversized.map { it[:sha256] } + store.too_large_proofs(client_id:)).uniq }
       end
 
       def wanted_proofs(client_id:) = proofs_owed(client_id:)[:wanted]
