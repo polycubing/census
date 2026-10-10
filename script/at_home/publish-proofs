@@ -1,0 +1,111 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Publish drained cube proofs to the bucket, and keep nothing here.
+#
+# Usage: script/at_home/publish-proofs <dir> <id> [--depth K] [--loop] [--dry-run]
+#
+#   dir        where script/at_home/drain-proofs lands proofs on this machine
+#   id         the shape the campaign refutes, e.g. 9/42947
+#   --depth K  which corona (default: the record's reached.corona_refuted, else 2)
+#   --loop     run again every five minutes, for a Terminal tab beside the drain
+#
+# For each <digest>.drat in the directory: confirm the bytes hash to the
+# digest, compress with xz, upload to s3://polycubes/public/<id>/proofs/
+# <digest>.drat.xz, confirm the object's size, write the entry to
+# data/<id>/cnf/corona<K>.published.json, and delete both local files. A
+# proof already in the ledger whose object is in the bucket is just deleted.
+# Safe to interrupt and repeat: nothing is deleted before the bucket has it.
+#
+# The ledger is the truth about what was published, and git carries it. The
+# bucket is the archive of record for the bytes; this machine is a hallway.
+#
+# Runs as the `polycubes` AWS profile (config/iam-laptop-policy.json). Only
+# the laptop does this. No credentials on borrowed machines.
+#
+# Example, the triskelion, in a Terminal tab:
+#
+#   script/at_home/publish-proofs ~/Developer/polycubing/proofs-42947 9/42947 --loop
+
+require "digest"
+require "json"
+require_relative "../../lib/census"
+
+ENV["AWS_PROFILE"] ||= "polycubes"
+
+def flag?(arguments, flag)
+  position = arguments.index(flag)
+  return false if position.nil?
+
+  arguments.delete_at(position)
+  true
+end
+
+def option(arguments, flag, default)
+  position = arguments.index(flag)
+  return default if position.nil?
+
+  arguments.slice!(position, 2).last
+end
+
+arguments = ARGV.dup
+dry_running = flag?(arguments, "--dry-run")
+looping = flag?(arguments, "--loop")
+depth = option(arguments, "--depth", nil)
+directory, id = arguments
+abort "usage: script/at_home/publish-proofs <dir> <id> [--depth K] [--loop] [--dry-run]" if directory.nil? || id.nil?
+
+root = File.expand_path("../../data", __dir__)
+record = JSON.parse(File.read(File.join(root, id, "shape.json")), symbolize_names: true)
+depth = Integer(depth || record.dig(:reached, :corona_refuted) || 2)
+ledger = Census::AtHome::ProofLedger.new(path: Census::AtHome::ProofLedger.path(root:, shape_id: id, depth:), shape_id: id, depth:)
+
+def object_bytes(key)
+  output = `aws s3api head-object --bucket #{Census::AtHome::ProofLedger::BUCKET} --key #{key} 2>/dev/null`
+  output.empty? ? nil : JSON.parse(output)["ContentLength"]
+end
+
+def upload(path, key)
+  system("aws", "s3", "cp", path, "s3://#{Census::AtHome::ProofLedger::BUCKET}/#{key}",
+         "--content-type", "application/x-xz", "--only-show-errors", exception: true)
+end
+
+def publish(ledger, directory, dry_running)
+  paths = Dir.glob(File.join(directory, "*.drat")).sort_by { File.size(it) }
+  puts "#{Time.now.utc.iso8601}  #{paths.size} proofs here, #{ledger.size} in the ledger"
+  paths.each_with_index do |path, index|
+    sha256 = File.basename(path, ".drat")
+    label = "#{index + 1}/#{paths.size} #{sha256[0, 12]} #{File.size(path)} bytes"
+    next puts("#{label}: would publish") if dry_running
+
+    unless Digest::SHA256.file(path).hexdigest == sha256
+      puts "#{label}: bytes do not hash to the name, left alone"
+      next
+    end
+
+    key = ledger.key(sha256)
+    if ledger.include?(sha256) && object_bytes(key) == ledger[sha256][:compressed][:bytes]
+      File.delete(path)
+      puts "#{label}: already published, local copy deleted"
+      next
+    end
+
+    compressed = "#{path}.xz"
+    system("xz", "--threads=0", "-6", "--keep", "--force", path, exception: true)
+    compressed_bytes = File.size(compressed)
+    upload(compressed, key) unless object_bytes(key) == compressed_bytes
+    abort "#{label}: the bucket does not hold #{compressed_bytes} bytes at #{key} after upload" unless object_bytes(key) == compressed_bytes
+
+    ledger.add(sha256:, bytes: File.size(path), compressed_bytes:, compressed_sha256: Digest::SHA256.file(compressed).hexdigest)
+    File.delete(compressed)
+    File.delete(path)
+    puts "#{label} -> #{compressed_bytes} bytes published, local copies deleted"
+  end
+end
+
+loop do
+  publish(ledger, directory, dry_running)
+  break unless looping
+
+  sleep 300
+end

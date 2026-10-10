@@ -37,3 +37,6 @@ data/9/24830/cnf/
 # bundle beside them do not.
 !data/9/42947/cnf/ledgers/
 !data/9/42947/cnf/corona2.proofs.json
+# Which of the campaign's proofs are in the bucket, written by
+# script/at_home/publish-proofs. The ledger is the truth, the bucket is storage.
+!data/9/42947/cnf/corona2.published.json
