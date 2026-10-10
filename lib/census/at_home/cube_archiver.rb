@@ -19,13 +19,18 @@ module Census
     class CubeArchiver
       class NotClosed < StandardError; end
 
-      def initialize(store:, root:, shape_id:, depth:, checker:, solver:)
+      # With a ledger (ProofLedger, what script/at_home/publish-proofs put in
+      # the bucket), every leaf's proof must be in it, and the manifest
+      # carries each proof's URL and compressed checksum so a stranger can
+      # fetch and recheck any one cube.
+      def initialize(store:, root:, shape_id:, depth:, checker:, solver:, ledger: nil)
         @store = store
         @root = root
         @shape_id = shape_id
         @depth = depth
         @checker = checker
         @solver = solver
+        @ledger = ledger
       end
 
       def archive
@@ -36,6 +41,11 @@ module Census
         leaves = store.cube_leaves(shape_id:)
         unchecked = leaves.reject { it[:proof_state] == "verified" }
         raise NotClosed, "#{unchecked.size} of #{leaves.size} leaf proofs are not verified" unless unchecked.empty?
+
+        if ledger
+          unpublished = leaves.reject { ledger.include?(it[:proof_sha256]) }
+          raise NotClosed, "#{unpublished.size} of #{leaves.size} leaf proofs are not in the bucket's ledger" unless unpublished.empty?
+        end
 
         FileUtils.mkdir_p(File.dirname(manifest_path))
         File.write(manifest_path, JSONDocument.new(manifest(leaves)).generate)
@@ -52,7 +62,7 @@ module Census
 
       private
 
-      attr_reader :checker, :depth, :root, :shape_id, :solver, :store
+      attr_reader :checker, :depth, :ledger, :root, :shape_id, :solver, :store
 
       def record_path(id) = File.join(root, id, "shape.json")
 
@@ -67,9 +77,17 @@ module Census
           solver:,
           proofs: leaves.size,
           leaves: leaves.map do |leaf|
-            { cube: leaf[:cube], proof: { bytes: leaf[:proof_bytes], sha256: leaf[:proof_sha256] }, solve_seconds: leaf[:seconds] }
+            { cube: leaf[:cube], proof: proof_entry(leaf), solve_seconds: leaf[:seconds] }
           end
         }
+      end
+
+      def proof_entry(leaf)
+        entry = { bytes: leaf[:proof_bytes], sha256: leaf[:proof_sha256] }
+        return entry unless ledger
+
+        published = ledger[leaf[:proof_sha256]]
+        entry.merge(compressed: published[:compressed], url: published[:url])
       end
 
       def solved_with(count)

@@ -85,3 +85,71 @@ RSpec.describe Census::AtHome::CubeArchiver, :home do
     expect(Digest::SHA256.file(result[:manifest]).hexdigest).to eq(result[:sha256])
   end
 end
+
+RSpec.describe Census::AtHome::CubeArchiver, "with the bucket's ledger", :home do
+  let(:store) { Census::AtHome::Store.new }
+  let(:coordinator) { Census::AtHome::Coordinator.new(store:, proof_policy: :every) }
+  let(:fixtures) { File.expand_path("../../fixtures", __dir__) }
+  let(:cnf_path) { File.join(fixtures, "proof", "contradiction.cnf") }
+
+  around do |example|
+    Dir.mktmpdir do |dir|
+      @root = dir
+      FileUtils.mkdir_p(File.join(dir, "3/2"))
+      FileUtils.cp(File.join(fixtures, "3/2/shape.json"), File.join(dir, "3/2/shape.json"))
+      example.run
+    end
+  end
+
+  before { store.reset }
+  after { store.close }
+
+  def tree
+    levels = %w[base.icnf clause-split.icnf].map { Census::SAT::CubeTree.level(File.join(fixtures, "cubes", it)) }
+    Census::SAT::CubeTree.new(levels:)
+  end
+
+  def seed_and_refute
+    Census::AtHome::CubeSeeder.new(store:, tree:, shape_id: "3/2", cells: [[0, 0, 0], [0, 0, 1], [0, 1, 0]], budgets: {}, cnf_path:).seed
+    worker = coordinator.register(handle: "spec")
+    store.cube_leaves(shape_id: "3/2").each do |leaf|
+      digest = Digest::SHA256.hexdigest(leaf[:cube].inspect)
+      coordinator.submit(unit_id: leaf[:id], client_id: worker[:id], verdict: "unsat",
+                         payload: { cube: leaf[:cube], proof: { sha256: digest, bytes: 8 } }, seconds: 0.5)
+      store.record_proof(id: store.wanted_proof(digest)[:id], state: "verified", path: "/proofs/#{digest}.drat")
+    end
+    coordinator.settle(shape_id: "3/2")
+  end
+
+  def ledger
+    path = Census::AtHome::ProofLedger.path(root: @root, shape_id: "3/2", depth: 2)
+    Census::AtHome::ProofLedger.new(path:, shape_id: "3/2", depth: 2)
+  end
+
+  def publish(digests)
+    book = ledger
+    digests.each { book.add(sha256: it, bytes: 8, compressed_bytes: 4, compressed_sha256: "c" * 64) }
+  end
+
+  def archiver
+    described_class.new(store:, root: @root, shape_id: "3/2", depth: 2, checker: "drat-trim 2e3b2dc", solver: "kissat 4.0.4", ledger:)
+  end
+
+  it "refuses while any leaf's proof is not in the bucket" do
+    seed_and_refute
+    digests = store.cube_leaves(shape_id: "3/2").map { it[:proof_sha256] }
+    publish(digests.drop(1))
+
+    expect { archiver.archive }.to raise_error(described_class::NotClosed, /1 of 6 leaf proofs are not in the bucket/)
+  end
+
+  it "gives every leaf its proof's URL and compressed checksum once all are published" do
+    seed_and_refute
+    publish(store.cube_leaves(shape_id: "3/2").map { it[:proof_sha256] })
+
+    manifest = JSON.parse(File.read(archiver.archive[:manifest]), symbolize_names: true)
+
+    expect(manifest[:leaves]).to all(include(proof: include(bytes: 8, compressed: { bytes: 4, sha256: "c" * 64 },
+                                                            url: a_string_starting_with("https://polycubes.s3.us-west-2.amazonaws.com/public/3/2/proofs/"))))
+  end
+end

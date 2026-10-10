@@ -1,0 +1,26 @@
+{
+  "bucket": "polycubes",
+  "region": "us-west-2",
+  "shape_id": "9/42947",
+  "corona_depth": 2,
+  "proofs": {
+    "6667ff48827138c48dec17bbd4e08f63acfc9f7607ea0ba20c7444bb77fd6684": {
+      "bytes": 5402,
+      "compressed": {
+        "bytes": 2320,
+        "sha256": "53311f62661bc50e62963ab56581cf6313d51c25964b882e9489ddc43cd4cadb"
+      },
+      "published": "2026-10-09",
+      "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/42947/proofs/6667ff48827138c48dec17bbd4e08f63acfc9f7607ea0ba20c7444bb77fd6684.drat.xz"
+    },
+    "672be37d30ec06705cb2b4b631b1645ed03416c9ac3aa08eb78384ad64e8f0f4": {
+      "bytes": 5404,
+      "compressed": {
+        "bytes": 2216,
+        "sha256": "bbee995567d766d5c61193920d0b5e4e67ca35f71e30ee56eef14ae7fe616ad0"
+      },
+      "published": "2026-10-09",
+      "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/42947/proofs/672be37d30ec06705cb2b4b631b1645ed03416c9ac3aa08eb78384ad64e8f0f4.drat.xz"
+    }
+  }
+}
