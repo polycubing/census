@@ -603,6 +603,18 @@ RSpec.describe Census::AtHome::Coordinator, :home do
         expect(hub.basin).to include(faucet: "closed", bytes: bytes.bytesize)
       end
 
+      # A proof adopted by a checker on another machine is stored there, not
+      # here. Counting it closed the colo's faucet while the laptop held it.
+      it "counts only proofs stored under its own directory, not ones adopted elsewhere" do
+        hub = described_class.new(store:, proofs: @proofs, proof_policy: :every, basin_high_bytes: 1)
+        seed_two_leaves
+        worker = hub.register(handle: "spec")
+        claim(hub, worker, [1])
+        store.record_proof(id: store.wanted_proof(digest)[:id], state: "stored", path: "/home/elsewhere/#{digest}.drat")
+
+        expect(hub.basin).to include(faucet: "open", bytes: 0)
+      end
+
       # A proof nobody can deliver must not hold a cube, or the faucet, forever.
       it "reopens a cube whose proof was wanted too long and never came" do
         hub = described_class.new(store:, proofs: @proofs, proof_policy: :every)

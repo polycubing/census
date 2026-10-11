@@ -305,9 +305,13 @@ module Census
       # basin. Wanted proofs are on volunteers' disks and are not counted:
       # seven that no client could ever deliver once held the faucet shut
       # with nothing stored at all.
-      def basin_bytes
+      # Bytes of stored proofs under a directory: the hub's own, for its basin.
+      # A proof a checker on another machine adopted is stored there, not here.
+      def basin_bytes(under:)
         synchronize do |connection|
-          row = connection.exec("SELECT coalesce(sum(proof_bytes), 0) AS bytes FROM results WHERE proof_state = 'stored'").first
+          row = connection.exec_params(<<~SQL, ["#{under}%"]).first
+            SELECT coalesce(sum(proof_bytes), 0) AS bytes FROM results WHERE proof_state = 'stored' AND proof_path LIKE $1
+          SQL
           Integer(row["bytes"])
         end
       end

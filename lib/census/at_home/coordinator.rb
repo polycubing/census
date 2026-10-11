@@ -84,7 +84,7 @@ module Census
       # lease. Hysteresis: once closed by the high mark it stays closed until
       # the low mark, so a level hovering at the mark does not flap.
       def basin
-        bytes = store.basin_bytes
+        bytes = store.basin_bytes(under: "#{File.expand_path(proofs)}/")
         free = @free_disk.call
         reasons = []
         if @basin_high_bytes
