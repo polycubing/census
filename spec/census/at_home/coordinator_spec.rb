@@ -795,3 +795,33 @@ RSpec.describe Census::AtHome::Coordinator, "checking from another machine", :ho
     expect(store.held_proofs(states: %w[stored]).first[:note]).to match(/unchecked/)
   end
 end
+
+RSpec.describe Census::AtHome::Coordinator, "two checkers on two machines", :home do
+  let(:store) { Census::AtHome::Store.new }
+  let(:digest) { "e" * 64 }
+
+  around { |example| Dir.mktmpdir { |dir| @proofs = dir and example.run } }
+
+  before do
+    store.load_schema(File.expand_path("../../../db/at_home.sql", __dir__))
+    store.reset
+  end
+
+  after { store.close }
+
+  # The colo's checker must not touch a proof the laptop adopted, and the
+  # laptop's must not touch one the colo holds: a path that is not under a
+  # checker's own directory is not its business, and is not "gone" either.
+  it "leaves a held proof alone when its path is under another machine's directory" do
+    here = described_class.new(store:, proofs: @proofs, proof_policy: :every)
+    store.add_unit(kind: "cube", shape_id: "8/1309", payload: { cnf_path: "/nowhere.cnf", cube: [] })
+    worker = here.register(handle: "spec")
+    unit = here.lease(client_id: worker[:id])
+    here.submit(unit_id: unit[:id], client_id: worker[:id], verdict: "unsat",
+                payload: { cube: [], proof: { sha256: digest, bytes: 8 } })
+    store.record_proof(id: store.wanted_proof(digest)[:id], state: "stored", path: "/home/elsewhere/#{digest}.drat")
+
+    expect(here.recheck(states: %w[stored])).to eq({})
+    expect(here.status[:proofs]).to eq({ "stored" => 1 })
+  end
+end

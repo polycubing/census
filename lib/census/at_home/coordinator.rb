@@ -233,7 +233,7 @@ module Census
       # time, since drat-trim is a separate process. Returns a tally.
       def recheck(states: %w[stored refuted], jobs: 1)
         queue = Queue.new
-        store.held_proofs(states:).each { queue << it }
+        held_here(states:).each { queue << it }
         queue.close
         tally = Hash.new(0)
         lock = Mutex.new
@@ -289,7 +289,7 @@ module Census
         end
 
         loop do
-          fresh = store.held_proofs(states:)
+          fresh = held_here(states:)
           lock.synchronize do
             fresh.each do |held|
               next if taken.include?(held[:id])
@@ -360,6 +360,14 @@ module Census
       attr_reader :check_timeout, :lease_seconds, :proofs, :store
 
       def refusal(note) = { accepted: false, note: }
+
+      # Held proofs under this machine's own proof directory. Two checkers on
+      # two machines share one database: a path under the other's directory
+      # is not this one's to check, and is not "gone" either.
+      def held_here(states:)
+        here = "#{File.expand_path(proofs)}/"
+        store.held_proofs(states:).select { it[:path].to_s.start_with?(here) }
+      end
 
       # The formula a cube unit refutes: the hub's own path when it exists
       # here, else this machine's copy by digest. Raises KeyError, which the
