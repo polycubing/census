@@ -50,14 +50,23 @@ module Census
       # disk_floor_bytes: closes it regardless when the proof directory's
       # filesystem has less free than this. nil for any of them means no
       # limit, which is the spike's behaviour and filled a disk twice.
+      #
+      # formulas: a directory of formulas named <sha256>.cnf, consulted when
+      # a unit's formula path does not exist on this machine, which is how a
+      # checker on another machine rebuilds the formula a proof refutes.
+      # verified_to: where a checked proof is moved once verified, so the
+      # machine that publishes proofs finds it.
       def initialize(store:, lease_seconds: 900, proofs: DEFAULT_PROOFS, proof_policy: :on_request,
                      max_proof_bytes: MAX_PROOF_BYTES, check_timeout: SAT::DratTrim::DEFAULT_TIMEOUT, check_on_delivery: true,
-                     basin_high_bytes: nil, basin_low_bytes: nil, disk_floor_bytes: nil, free_disk: nil)
+                     basin_high_bytes: nil, basin_low_bytes: nil, disk_floor_bytes: nil, free_disk: nil,
+                     formulas: nil, verified_to: nil)
         raise ArgumentError, "proof_policy must be one of #{PROOF_POLICIES.inspect}" unless PROOF_POLICIES.include?(proof_policy)
 
         @store = store
         @lease_seconds = lease_seconds
         @proofs = proofs
+        @formulas = formulas
+        @verified_to = verified_to
         @proof_policy = proof_policy
         @max_proof_bytes = max_proof_bytes
         @check_timeout = check_timeout
@@ -184,6 +193,19 @@ module Census
       end
 
       def wanted_proofs(client_id:) = proofs_owed(client_id:)[:wanted]
+
+      # Take wanted proofs whose bytes are in a directory on this machine as
+      # stored there, for this machine's checker. The hub never sees the
+      # bytes. Returns how many were adopted.
+      def adopt_proofs(directory:)
+        store.wanted_claims.count do |claim|
+          path = File.join(directory, "#{claim[:sha256]}.drat")
+          next false unless File.exist?(path) && File.size(path) == claim[:bytes]
+
+          store.record_proof(id: claim[:id], state: "stored", path:, note: "adopted from #{directory}, queued for checking")
+          true
+        end
+      end
 
       # Close every split of a shape whose children are all refuted, deepest
       # first, until nothing changes. The roll-up does this as results land,
@@ -339,6 +361,28 @@ module Census
 
       def refusal(note) = { accepted: false, note: }
 
+      # The formula a cube unit refutes: the hub's own path when it exists
+      # here, else this machine's copy by digest. Raises KeyError, which the
+      # caller records as unchecked rather than refuted.
+      def formula_for_check(unit)
+        path = unit[:cnf_path]
+        return path if path && File.exist?(path)
+
+        cached = @formulas && unit[:cnf_sha256] && File.join(@formulas, "#{unit[:cnf_sha256]}.cnf")
+        return cached if cached && File.exist?(cached)
+
+        raise KeyError, "no formula on this machine for #{path.inspect} (digest #{unit[:cnf_sha256].to_s[0, 12]})"
+      end
+
+      def moved_once_verified(path)
+        return path unless @verified_to
+
+        FileUtils.mkdir_p(@verified_to)
+        destination = File.join(@verified_to, File.basename(path))
+        FileUtils.mv(path, destination)
+        destination
+      end
+
       def oversized?(bytes) = bytes.to_i > max_proof_bytes
 
       # Bytes the hub may still fill before reaching its disk floor, or nil
@@ -430,12 +474,13 @@ module Census
         unit = wanted[:unit]
 
         result = Tempfile.create(["census-cube", ".cnf"]) do |formula|
-          SAT::CubeFile.stream_augmented(cnf_path: unit.fetch(:cnf_path), cube: unit.fetch(:cube, []), io: formula)
+          SAT::CubeFile.stream_augmented(cnf_path: formula_for_check(unit), cube: unit.fetch(:cube, []), io: formula)
           formula.flush
           SAT::DratTrim.check(cnf_path: formula.path, proof_path: path, timeout: check_timeout)
         end
 
         state = result.verified? ? "verified" : "refuted"
+        path = moved_once_verified(path) if result.verified?
         store.record_proof(id: wanted[:id], state:, path:, note: result.summary)
         note = "proof #{state}: #{result.summary}"
 

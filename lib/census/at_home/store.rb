@@ -216,6 +216,14 @@ module Census
 
       def wanted_proofs_named(sha256) = proofs_named(sha256, states: %w[wanted])
 
+      # Every claim whose proof is wanted, whoever made it.
+      def wanted_claims
+        rows = synchronize do |connection|
+          connection.exec("SELECT id, proof_sha256, proof_bytes FROM results WHERE proof_state = 'wanted' ORDER BY proof_bytes, id")
+        end
+        rows.map { { id: Integer(it["id"]), sha256: it["proof_sha256"], bytes: it["proof_bytes"] && Integer(it["proof_bytes"]) } }
+      end
+
       # Every result naming this digest whose proof is in one of the states.
       def proofs_named(sha256, states:)
         rows = synchronize do |connection|
@@ -253,7 +261,7 @@ module Census
         rows = synchronize do |connection|
           connection.exec_params(<<~SQL, [PG::TextEncoder::Array.new.encode(states)])
             SELECT results.id, results.proof_sha256, results.proof_bytes, results.proof_path, results.unit_id,
-                   units.payload AS unit_payload
+                   results.checker_note, units.payload AS unit_payload
               FROM results JOIN units ON units.id = results.unit_id
              WHERE results.proof_state = ANY($1) AND results.proof_path IS NOT NULL
              ORDER BY results.proof_bytes NULLS LAST, results.id
@@ -264,7 +272,8 @@ module Census
         # second-long ones behind them.
         rows.map do |row|
           { id: Integer(row["id"]), sha256: row["proof_sha256"], bytes: row["proof_bytes"] && Integer(row["proof_bytes"]),
-            path: row["proof_path"], unit_id: Integer(row["unit_id"]), unit: JSON.parse(row["unit_payload"], symbolize_names: true) }
+            path: row["proof_path"], unit_id: Integer(row["unit_id"]), note: row["checker_note"],
+            unit: JSON.parse(row["unit_payload"], symbolize_names: true) }
         end
       end
 

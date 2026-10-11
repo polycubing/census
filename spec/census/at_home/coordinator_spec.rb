@@ -711,3 +711,87 @@ RSpec.describe Census::AtHome::Coordinator, "proofs too large to carry", :home d
     expect(loose.wanted_proofs(client_id: worker[:id])).to eq(["a" * 64, "b" * 64])
   end
 end
+
+# The hub's disk stopped mattering on 2026-10-11, when the colo had 2.6 GB
+# free and eight proofs of 2 to 4 GB each waiting on it. A machine with the
+# bytes and a database connection can adopt a wanted proof, check it against
+# the formula it holds a copy of, and file the verdict, with the hub never
+# touching the bytes.
+RSpec.describe Census::AtHome::Coordinator, "checking from another machine", :home do
+  let(:store) { Census::AtHome::Store.new }
+  let(:fixtures) { File.expand_path("../../fixtures/proof", __dir__) }
+  let(:bytes) { File.binread(File.join(fixtures, "contradiction.drat")) }
+  let(:digest) { Digest::SHA256.hexdigest(bytes) }
+  let(:formula_digest) { Digest::SHA256.file(File.join(fixtures, "contradiction.cnf")).hexdigest }
+
+  around do |example|
+    Dir.mktmpdir do |dir|
+      @proofs = File.join(dir, "proofs")
+      @formulas = File.join(dir, "formulas")
+      @verified = File.join(dir, "verified")
+      FileUtils.mkdir_p([@proofs, @formulas, @verified])
+      FileUtils.cp(File.join(fixtures, "contradiction.cnf"), File.join(@formulas, "#{formula_digest}.cnf"))
+      example.run
+    end
+  end
+
+  before do
+    store.load_schema(File.expand_path("../../../db/at_home.sql", __dir__))
+    store.reset
+  end
+
+  after { store.close }
+
+  let(:coordinator) do
+    described_class.new(store:, proofs: @proofs, proof_policy: :every, formulas: @formulas, verified_to: @verified)
+  end
+
+  # A claim made on a hub whose formula path means nothing here.
+  def claim(cnf_path: "/nowhere/contradiction.cnf")
+    store.add_unit(kind: "cube", shape_id: "8/1309", payload: { cnf_path:, cnf_sha256: formula_digest, cube: [] })
+    worker = coordinator.register(handle: "spec")
+    unit = coordinator.lease(client_id: worker[:id])
+    coordinator.submit(unit_id: unit[:id], client_id: worker[:id], verdict: "unsat",
+                       payload: { cube: [], proof: { sha256: digest, bytes: bytes.bytesize } })
+  end
+
+  it "adopts a wanted proof whose bytes are on this disk, as stored under that path" do
+    claim
+    File.binwrite(File.join(@proofs, "#{digest}.drat"), bytes)
+
+    expect(coordinator.adopt_proofs(directory: @proofs)).to eq(1)
+    expect(coordinator.status[:proofs]).to eq({ "stored" => 1 })
+    expect(store.held_proofs(states: %w[stored]).first).to include(path: File.join(@proofs, "#{digest}.drat"))
+  end
+
+  it "leaves a wanted proof alone when the file here is missing or the wrong size" do
+    claim
+    File.binwrite(File.join(@proofs, "#{digest}.drat"), "#{bytes}extra")
+
+    expect(coordinator.adopt_proofs(directory: @proofs)).to eq(0)
+    expect(coordinator.status[:proofs]).to eq({ "wanted" => 1 })
+  end
+
+  it "checks an adopted proof against the formula found by digest in its own cache, and files it as verified", :checker do
+    claim
+    File.binwrite(File.join(@proofs, "#{digest}.drat"), bytes)
+    coordinator.adopt_proofs(directory: @proofs)
+
+    tally = coordinator.recheck(states: %w[stored])
+
+    expect(tally).to eq({ "verified" => 1 })
+    expect(File).to exist(File.join(@verified, "#{digest}.drat"))
+    expect(File).not_to exist(File.join(@proofs, "#{digest}.drat"))
+    expect(store.held_proofs(states: %w[verified]).first).to include(path: File.join(@verified, "#{digest}.drat"))
+  end
+
+  it "says a proof is unchecked, not refuted, when no formula can be found" do
+    plain = described_class.new(store:, proofs: @proofs, proof_policy: :every)
+    claim
+    File.binwrite(File.join(@proofs, "#{digest}.drat"), bytes)
+    plain.adopt_proofs(directory: @proofs)
+
+    expect(plain.recheck(states: %w[stored])).to eq({ "not verified" => 1 })
+    expect(store.held_proofs(states: %w[stored]).first[:note]).to match(/unchecked/)
+  end
+end

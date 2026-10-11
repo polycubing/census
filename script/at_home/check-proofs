@@ -58,7 +58,13 @@ store = Census::AtHome::Store.new pool_size: jobs + 2
 policy = ENV.fetch('AT_HOME_PROOF_POLICY', 'every').to_sym
 proofs = ENV.fetch('AT_HOME_PROOFS', Census::AtHome::Coordinator::DEFAULT_PROOFS)
 timeout = Integer(ENV.fetch('AT_HOME_CHECK_TIMEOUT', Census::SAT::DratTrim::DEFAULT_TIMEOUT))
-coordinator = Census::AtHome::Coordinator.new store:, proofs:, proof_policy: policy, check_timeout: timeout
+# On a machine other than the hub's: AT_HOME_FORMULAS holds the formula as
+# <sha256>.cnf, and AT_HOME_VERIFIED_TO is where a verified proof is moved,
+# which is where script/at_home/publish-proofs looks. See adopt-proofs.
+formulas = ENV['AT_HOME_FORMULAS']
+verified_to = ENV['AT_HOME_VERIFIED_TO']
+coordinator = Census::AtHome::Coordinator.new(store:, proofs:, proof_policy: policy, check_timeout: timeout,
+                                              formulas:, verified_to:)
 
 if looping
   # One line per proof as it finishes, and a summary every refill.
