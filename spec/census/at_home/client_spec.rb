@@ -245,3 +245,50 @@ RSpec.describe Census::AtHome::Client, "sharing a proof directory" do
     expect(tally).to eq({ "proof delivered" => 1 })
   end
 end
+
+RSpec.describe Census::AtHome::Client, "holding proofs for a checker on this machine" do
+  around { |example| Dir.mktmpdir { |dir| @dir = dir and example.run } }
+
+  it "never hands a proof over when told to hold them" do
+    client = described_class.new(url: "http://127.0.0.1:1", handle: "spec", proofs: @dir, formulas: @dir, hold_proofs: true)
+    File.binwrite(File.join(@dir, "#{'d' * 64}.drat"), "a\x02\x00")
+    allow(client).to receive(:post_proof).and_raise("must not upload")
+    tally = Hash.new(0)
+
+    client.hand_over(["d" * 64], tally)
+
+    expect(tally).to eq({})
+    expect(File).to exist(File.join(@dir, "#{'d' * 64}.drat"))
+  end
+end
+
+RSpec.describe Census::AtHome::Client, "uploading a proof" do
+  require "webrick"
+
+  around { |example| Dir.mktmpdir { |dir| @dir = dir and example.run } }
+
+  # A proof is sent as a stream, not read whole into memory: File.binread of
+  # a 4 GB proof fails outright on macOS, and four laptop clients died that way.
+  it "streams the file to the coordinator" do
+    received = nil
+    server = WEBrick::HTTPServer.new(Port: 0, Logger: WEBrick::Log.new(File::NULL), AccessLog: [])
+    server.mount_proc("/proof/#{'d' * 64}") do |request, response|
+      received = [request["Content-Length"], request.body.bytesize]
+      response.body = '{"accepted": true, "note": "ok"}'
+    end
+    thread = Thread.new { server.start }
+    port = server.config[:Port]
+    begin
+      client = described_class.new(url: "http://127.0.0.1:#{port}", handle: "spec", proofs: @dir, formulas: @dir)
+      File.binwrite(File.join(@dir, "#{'d' * 64}.drat"), "a\x02\x00" * 1000)
+
+      answer = client.send(:post_proof, "d" * 64)
+
+      expect(answer).to eq({ accepted: true, note: "ok" })
+      expect(received).to eq(["3000", 3000])
+    ensure
+      server.shutdown
+      thread.join
+    end
+  end
+end

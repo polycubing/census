@@ -46,7 +46,8 @@ module Census
       DEFAULT_CUBE_TIMEOUT = 3600
 
       def initialize(url:, handle:, display_name: nil, contact: nil, report: nil, give_up_after: nil,
-                     proofs: DEFAULT_PROOFS, formulas: DEFAULT_FORMULAS, cube_timeout: DEFAULT_CUBE_TIMEOUT, disk_floor_bytes: nil)
+                     proofs: DEFAULT_PROOFS, formulas: DEFAULT_FORMULAS, cube_timeout: DEFAULT_CUBE_TIMEOUT, disk_floor_bytes: nil,
+                     hold_proofs: false)
         @base = URI(url)
         @handle = handle
         @display_name = display_name
@@ -57,6 +58,7 @@ module Census
         @formulas = formulas
         @cube_timeout = cube_timeout
         @disk_floor_bytes = disk_floor_bytes
+        @hold_proofs = hold_proofs
         @client_id = nil
       end
 
@@ -134,7 +136,7 @@ module Census
       private
 
       attr_reader :base, :client_id, :contact, :cube_timeout, :disk_floor_bytes, :display_name, :formulas, :give_up_after,
-                  :handle, :proofs, :report
+                  :handle, :hold_proofs, :proofs, :report
 
       # A solver that dies (a full disk, a kill, a bad build) is reported as
       # an error, which the coordinator turns into a released unit for someone
@@ -228,8 +230,10 @@ module Census
 
       # A proof goes up as raw bytes. Base64 would inflate a hundred megabytes
       # by a third to say nothing extra.
+      # Streamed from the file, never read whole: File.binread of a 4 GB
+      # proof fails outright on macOS, and four laptop clients died that way.
       def post_proof(sha256)
-        deliver("/proof/#{sha256}", File.binread(proof_path(sha256)), "application/octet-stream")
+        File.open(proof_path(sha256), "rb") { |file| deliver("/proof/#{sha256}", file, "application/octet-stream") }
       end
 
       def proof_path(sha256) = File.join(proofs, "#{sha256}.drat")
@@ -241,6 +245,9 @@ module Census
       public
 
       def hand_over(wanted, tally)
+        # A checker on this machine adopts them instead; nothing goes up.
+        return if hold_proofs
+
         Array(wanted).each do |sha256|
           unless File.exist?(proof_path(sha256))
             report&.call("proof #{sha256[0, 12]} requested but not on this disk")
@@ -347,7 +354,14 @@ module Census
       def exchange(path, body, content_type)
         request = Net::HTTP::Post.new(URI.join(base, path))
         request["Content-Type"] = content_type
-        request.body = body
+        if body.respond_to?(:read)
+          # A file, streamed. Rewound here because a retry comes back through.
+          body.rewind
+          request["Content-Length"] = body.size.to_s
+          request.body_stream = body
+        else
+          request.body = body
+        end
         response = Net::HTTP.start(base.host, base.port, read_timeout: 300, open_timeout: 30) { it.request(request) }
 
         # Throttling and server errors mean "not now"; other 4xx means we

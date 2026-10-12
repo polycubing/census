@@ -219,9 +219,31 @@ module Census
       # Every claim whose proof is wanted, whoever made it.
       def wanted_claims
         rows = synchronize do |connection|
-          connection.exec("SELECT id, proof_sha256, proof_bytes FROM results WHERE proof_state = 'wanted' ORDER BY proof_bytes, id")
+          connection.exec("SELECT id, unit_id, proof_sha256, proof_bytes FROM results WHERE proof_state = 'wanted' ORDER BY proof_bytes, id")
         end
-        rows.map { { id: Integer(it["id"]), sha256: it["proof_sha256"], bytes: it["proof_bytes"] && Integer(it["proof_bytes"]) } }
+        rows.map do
+          { id: Integer(it["id"]), unit_id: Integer(it["unit_id"]), sha256: it["proof_sha256"],
+            bytes: it["proof_bytes"] && Integer(it["proof_bytes"]) }
+        end
+      end
+
+      # A verified result for the same unit naming the same proof, if any.
+      def verified_twin(unit_id:, sha256:)
+        row = synchronize do |connection|
+          connection.exec_params(<<~SQL, [unit_id, sha256]).first
+            SELECT id, proof_path FROM results
+             WHERE unit_id = $1 AND proof_sha256 = $2 AND proof_state = 'verified'
+             ORDER BY id LIMIT 1
+          SQL
+        end
+        row && { id: Integer(row["id"]), path: row["proof_path"] }
+      end
+
+      # A file moved: every claim pointing at it follows.
+      def repath_proofs(from:, to:)
+        synchronize do |connection|
+          connection.exec_params("UPDATE results SET proof_path = $2 WHERE proof_path = $1", [from, to])
+        end
       end
 
       # Every result naming this digest whose proof is in one of the states.

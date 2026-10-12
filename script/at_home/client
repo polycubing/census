@@ -41,6 +41,8 @@
 #                             than this. Your limit, which the coordinator
 #                             cannot know for you
 #                               default: none
+#   --hold-proofs             never upload a proof: a checker on this machine
+#                             adopts them (script/at_home/adopt-proofs)
 #   --once                    stop when the queue is empty rather than waiting
 #                             (a coordinator asking for a pause is not an
 #                             empty queue, and is waited out)
@@ -124,6 +126,7 @@ give_up_after  = option(arguments, '--give-up-after', nil)&.then { Integer(it) }
 cube_timeout   = option(arguments, '--cube-timeout',  default_cube_timeout).then { Integer(it) }
 disk_floor_gb  = option(arguments, '--disk-floor-gb', nil)&.then { Float(it) }
 once           = flag?  arguments, '--once'
+hold_proofs    = flag?  arguments, '--hold-proofs'
 
 # Check options
 check_for_unknown_options arguments
@@ -139,6 +142,7 @@ client = Census::AtHome::Client.new url:,
                                     disk_floor_bytes:,
                                     formulas:,
                                     proofs:,
+                                    hold_proofs:,
                                     report: reporter
 
 tally = begin

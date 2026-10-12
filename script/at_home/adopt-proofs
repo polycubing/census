@@ -5,13 +5,21 @@
 # stored here, so this machine's checker can verify them. The hub never
 # touches the bytes.
 #
-# Usage: script/at_home/adopt-proofs <dir> [--loop] [--interval SECONDS]
+# Usage: script/at_home/adopt-proofs <dir> [--from-bucket ID] [--depth K] [--loop] [--interval SECONDS]
 #
 #   dir                   where the proofs are: a client's --proofs directory
 #                         on this machine, or files pulled here with rsync
+#   --from-bucket ID      a wanted proof not here but in the bucket, per
+#                         data/<ID>/cnf/corona<K>.published.json, is fetched
+#                         and decompressed into dir first
+#   --depth K             which corona's ledger (default: the record's
+#                         reached.corona_refuted, else 2)
 #   --loop                keep adopting as new claims appear (default: once)
 #   --interval SECONDS    how long to sleep between passes, with --loop
 #                           default: 60
+#
+# A wanted claim whose unit already has the same proof verified (the cube
+# was solved twice) is settled on that check without any bytes.
 #
 # Needs the hub's database: POLYCUBE_AT_HOME_URL, which can point through an
 # ssh tunnel at the hub's Postgres. Pair with script/at_home/check-proofs on
@@ -23,7 +31,7 @@
 # was full (2026-10-11), with a tunnel to the colo's Postgres on 5433:
 #
 #   POLYCUBE_AT_HOME_URL=postgres://s@localhost:5433/polycube_at_home \
-#     script/at_home/adopt-proofs ~/Developer/polycubing/client-proofs --loop
+#     script/at_home/adopt-proofs ~/Developer/polycubing/client-proofs --from-bucket 9/42947 --loop
 
 require_relative "../../lib/census"
 
@@ -45,15 +53,26 @@ end
 arguments = ARGV.dup
 looping = flag?(arguments, "--loop")
 interval = Integer(option(arguments, "--interval", 60))
+shape_id = option(arguments, "--from-bucket", nil)
+depth = option(arguments, "--depth", nil)
 directory = arguments.shift
-abort "usage: script/at_home/adopt-proofs <dir> [--loop] [--interval SECONDS]" if directory.nil? || !arguments.empty?
+abort "usage: script/at_home/adopt-proofs <dir> [--from-bucket ID] [--depth K] [--loop] [--interval SECONDS]" if directory.nil? || !arguments.empty?
 directory = File.expand_path(directory)
+
+ledger = nil
+if shape_id
+  root = File.expand_path("../../data", __dir__)
+  record = JSON.parse(File.read(File.join(root, shape_id, "shape.json")), symbolize_names: true)
+  depth = Integer(depth || record.dig(:reached, :corona_refuted) || 2)
+  ledger = Census::AtHome::ProofLedger.new(path: Census::AtHome::ProofLedger.path(root:, shape_id:, depth:), shape_id:, depth:)
+  puts "ledger: #{ledger.size} proofs in the bucket"
+end
 
 store = Census::AtHome::Store.new
 coordinator = Census::AtHome::Coordinator.new(store:, proof_policy: :every)
 
 loop do
-  adopted = coordinator.adopt_proofs(directory:)
+  adopted = coordinator.adopt_proofs(directory:, ledger:)
   puts "#{Time.now.utc.iso8601}  adopted #{adopted}  now #{store.proof_states.inspect}"
   break unless looping
 

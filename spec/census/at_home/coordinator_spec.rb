@@ -837,3 +837,89 @@ RSpec.describe Census::AtHome::Coordinator, "two checkers on two machines", :hom
     expect(here.status[:proofs]).to eq({ "stored" => 1 })
   end
 end
+
+RSpec.describe Census::AtHome::Coordinator, "one file, several claims, on another machine", :home do
+  let(:store) { Census::AtHome::Store.new }
+  let(:fixtures) { File.expand_path("../../fixtures/proof", __dir__) }
+  let(:bytes) { File.binread(File.join(fixtures, "contradiction.drat")) }
+  let(:digest) { Digest::SHA256.hexdigest(bytes) }
+  let(:formula_digest) { Digest::SHA256.file(File.join(fixtures, "contradiction.cnf")).hexdigest }
+
+  around do |example|
+    Dir.mktmpdir do |dir|
+      @proofs = File.join(dir, "proofs")
+      @formulas = File.join(dir, "formulas")
+      @verified = File.join(dir, "verified")
+      FileUtils.mkdir_p([@proofs, @formulas, @verified])
+      FileUtils.cp(File.join(fixtures, "contradiction.cnf"), File.join(@formulas, "#{formula_digest}.cnf"))
+      example.run
+    end
+  end
+
+  before do
+    store.load_schema(File.expand_path("../../../db/at_home.sql", __dir__))
+    store.reset
+  end
+
+  after { store.close }
+
+  let(:coordinator) do
+    described_class.new(store:, proofs: @proofs, proof_policy: :every, formulas: @formulas, verified_to: @verified)
+  end
+
+  # Two cubes refuted by the same bytes: the proof of F refutes F with any
+  # literal added, so sibling cubes often share one proof.
+  def claim(cube:)
+    store.add_unit(kind: "cube", shape_id: "8/1309", payload: { cnf_path: "/nowhere.cnf", cnf_sha256: formula_digest, cube: })
+    worker = coordinator.register(handle: "spec-#{cube.inspect}")
+    unit = coordinator.lease(client_id: worker[:id])
+    coordinator.submit(unit_id: unit[:id], client_id: worker[:id], verdict: "unsat",
+                       payload: { cube:, proof: { sha256: digest, bytes: bytes.bytesize } })
+    unit[:id]
+  end
+
+  # The laptop checked two claims of one file in two threads; the first
+  # verified and moved the file, the second then died moving it again, its
+  # row stayed stored, and the next pass declared the bytes gone.
+  it "checks every claim of one file before moving it, and points them all at where it went", :checker do
+    claim(cube: [])
+    claim(cube: [1])
+    File.binwrite(File.join(@proofs, "#{digest}.drat"), bytes)
+    coordinator.adopt_proofs(directory: @proofs)
+
+    expect(coordinator.recheck(states: %w[stored], jobs: 2)).to eq({ "verified" => 1 })
+    expect(coordinator.status[:proofs]).to eq({ "verified" => 2 })
+    expect(store.held_proofs(states: %w[verified]).map { it[:path] }.uniq).to eq([File.join(@verified, "#{digest}.drat")])
+  end
+
+  it "settles a wanted claim whose unit already has the same proof verified, without the bytes" do
+    unit = claim(cube: [])
+    File.binwrite(File.join(@proofs, "#{digest}.drat"), bytes)
+    coordinator.adopt_proofs(directory: @proofs)
+    coordinator.recheck(states: %w[stored])
+    store.release_unit(unit)
+    worker = coordinator.register(handle: "again")
+    leased = coordinator.lease(client_id: worker[:id])
+    coordinator.submit(unit_id: leased[:id], client_id: worker[:id], verdict: "unsat",
+                       payload: { cube: [], proof: { sha256: digest, bytes: bytes.bytesize } })
+    expect(coordinator.status[:proofs]).to eq({ "verified" => 1, "wanted" => 1 })
+
+    expect(coordinator.adopt_proofs(directory: @proofs)).to eq(1)
+    expect(coordinator.status[:proofs]).to eq({ "verified" => 2 })
+  end
+
+  it "fetches a wanted proof from the bucket when the ledger has it and this disk does not" do
+    claim(cube: [])
+    ledger = Census::AtHome::ProofLedger.new(path: File.join(@proofs, "ledger.json"), shape_id: "8/1309", depth: 2)
+    ledger.add(sha256: digest, bytes: bytes.bytesize, compressed_bytes: 1, compressed_sha256: "c" * 64)
+    fetched = []
+    fetch = lambda do |url, destination|
+      fetched << url
+      File.binwrite(destination, bytes)
+    end
+
+    expect(coordinator.adopt_proofs(directory: @proofs, ledger:, fetch:)).to eq(1)
+    expect(fetched).to eq([ledger.url(digest)])
+    expect(coordinator.status[:proofs]).to eq({ "stored" => 1 })
+  end
+end

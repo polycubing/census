@@ -197,9 +197,20 @@ module Census
       # Take wanted proofs whose bytes are in a directory on this machine as
       # stored there, for this machine's checker. The hub never sees the
       # bytes. Returns how many were adopted.
-      def adopt_proofs(directory:)
+      #
+      # A claim whose unit already has the same proof verified (the cube was
+      # solved twice) is settled on the strength of that check. A claim
+      # whose bytes are in the bucket, per the ledger, is fetched there.
+      def adopt_proofs(directory:, ledger: nil, fetch: nil)
+        fetch ||= method(:fetch_from_bucket)
         store.wanted_claims.count do |claim|
+          if (twin = store.verified_twin(unit_id: claim[:unit_id], sha256: claim[:sha256]))
+            store.record_proof(id: claim[:id], state: "verified", path: twin[:path], note: "the same proof was verified for this unit as result #{twin[:id]}")
+            next true
+          end
+
           path = File.join(directory, "#{claim[:sha256]}.drat")
+          fetch.call(ledger.url(claim[:sha256]), path) if !File.exist?(path) && ledger&.include?(claim[:sha256])
           next false unless File.exist?(path) && File.size(path) == claim[:bytes]
 
           store.record_proof(id: claim[:id], state: "stored", path:, note: "adopted from #{directory}, queued for checking")
@@ -318,7 +329,13 @@ module Census
           return "asked again"
         end
 
-        check_delivered(wanted: held, path: held[:path])[:accepted] ? "verified" : "not verified"
+        rows = held[:rows] || [held]
+        outcomes = rows.map { check_delivered(wanted: it, path: held[:path]) }
+        if @verified_to && outcomes.any? { it[:accepted] }
+          destination = moved_once_verified(held[:path])
+          store.repath_proofs(from: held[:path], to: destination)
+        end
+        outcomes.all? { it[:accepted] } ? "verified" : "not verified"
       end
 
       # Take delivery of a proof and check it.
@@ -364,9 +381,14 @@ module Census
       # Held proofs under this machine's own proof directory. Two checkers on
       # two machines share one database: a path under the other's directory
       # is not this one's to check, and is not "gone" either.
+      #
+      # One file can back several claims (a proof of F refutes F with any
+      # literal added, so sibling cubes often share one), and they are
+      # checked together: `rows` carries every claim of the file.
       def held_here(states:)
         here = "#{File.expand_path(proofs)}/"
-        store.held_proofs(states:).select { it[:path].to_s.start_with?(here) }
+        mine = store.held_proofs(states:).select { it[:path].to_s.start_with?(here) }
+        mine.group_by { it[:path] }.values.map { |rows| rows.first.merge(rows:) }
       end
 
       # The formula a cube unit refutes: the hub's own path when it exists
@@ -380,6 +402,14 @@ module Census
         return cached if cached && File.exist?(cached)
 
         raise KeyError, "no formula on this machine for #{path.inspect} (digest #{unit[:cnf_sha256].to_s[0, 12]})"
+      end
+
+      # Download a published proof and decompress it to `destination`, as a
+      # stranger would: the object is public and xz'd.
+      def fetch_from_bucket(url, destination)
+        compressed = "#{destination}.xz"
+        system("curl", "-sSf", "-o", compressed, url, exception: true)
+        system("xz", "--decompress", "--force", compressed, exception: true)
       end
 
       def moved_once_verified(path)
@@ -488,7 +518,6 @@ module Census
         end
 
         state = result.verified? ? "verified" : "refuted"
-        path = moved_once_verified(path) if result.verified?
         store.record_proof(id: wanted[:id], state:, path:, note: result.summary)
         note = "proof #{state}: #{result.summary}"
 
