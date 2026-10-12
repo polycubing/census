@@ -39,6 +39,12 @@ paths = remote(host, "psql -tA polycube_at_home -c \"#{query}\"").lines.map(&:st
 abort "could not list verified proofs on #{host}" unless $?.success? # rubocop:disable Style/SpecialGlobalVars
 
 puts "#{paths.size} verified proofs on record"
+
+# A proof this machine's own checker verified is already here, under the
+# destination: its path means nothing on the coordinator's machine.
+here = "#{File.expand_path(destination)}/"
+paths.reject! { it.start_with?(here) }
+puts "#{paths.size} of them on #{host}"
 exit if paths.empty?
 
 # rsync skips the paths drained on an earlier run (--ignore-missing-args) and
