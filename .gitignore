@@ -40,3 +40,6 @@ data/9/24830/cnf/
 # Which of the campaign's proofs are in the bucket, written by
 # script/at_home/publish-proofs. The ledger is the truth, the bucket is storage.
 !data/9/42947/cnf/corona2.published.json
+# The campaign's database, dumped when it ended: every unit, result, solve
+# time, proof size, and split, the raw material for the stats to come.
+!data/9/42947/cnf/corona2.at-home.sql.xz
