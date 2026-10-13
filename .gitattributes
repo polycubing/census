@@ -12,3 +12,7 @@ data/** text eol=lf
 # proof is worse than no proof: it fails to check, and the shape it refutes
 # looks unproven when it isn't.
 *.drat -text
+
+# Compressed artifacts likewise: a database dump under data/ was stored with
+# its bytes "normalized" once, and came back unreadable.
+*.xz -text
