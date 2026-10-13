@@ -7636,6 +7636,15 @@
       "published": "2026-10-10",
       "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/42947/proofs/328cd4d6c90d5d4ebbc978b47c02f033c277bdd5e85d30b50e076d909763473a.drat.xz"
     },
+    "329c52db32b62540eacb222510be6145731bed9c78c08cbcaa6d9898d0d688e6": {
+      "bytes": 275121516,
+      "compressed": {
+        "bytes": 80377184,
+        "sha256": "4947a2845e30badc873df1c87621a1856117ea01d3b6201636a1620a179844ae"
+      },
+      "published": "2026-10-12",
+      "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/42947/proofs/329c52db32b62540eacb222510be6145731bed9c78c08cbcaa6d9898d0d688e6.drat.xz"
+    },
     "32beffbb4ecf6518a331b178165544eadf2c712286470eecc4ea52a74380a9b4": {
       "bytes": 127127564,
       "compressed": {
@@ -8904,6 +8913,15 @@
       },
       "published": "2026-10-10",
       "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/42947/proofs/3b2c27630dd3a892b99f4fc4cfa4db5de9f9f338e873be6dcff67fe238f74c9a.drat.xz"
+    },
+    "3b30b874b3e2f48563cfa62e082b24e2479fa1a16a2fc78609dc4ebe87de8c0b": {
+      "bytes": 345593042,
+      "compressed": {
+        "bytes": 104806128,
+        "sha256": "435fb1d0b762a30dbc921b9e684bd4cf81520f790448bcd2bb520c30ad473aca"
+      },
+      "published": "2026-10-12",
+      "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/42947/proofs/3b30b874b3e2f48563cfa62e082b24e2479fa1a16a2fc78609dc4ebe87de8c0b.drat.xz"
     },
     "3b5343b14a9c4ee8663871fa37f0cd4ddf0dcab13c1af5ae093f32f202fbff69": {
       "bytes": 156016459,
@@ -12937,6 +12955,15 @@
       "published": "2026-10-10",
       "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/42947/proofs/5772f8f97ceb45120e65906ae837af3663138a74f259358cf5ba4ab732681a13.drat.xz"
     },
+    "577e0b7c207e92f1ed64276a91ff1427dfc8cd8f1f09dccf790eaf874a6c814f": {
+      "bytes": 174869306,
+      "compressed": {
+        "bytes": 44927608,
+        "sha256": "d138a5c58c98bf039c6bea820f9ab018fa6a4d7c5394d26029f43f2a2ea75008"
+      },
+      "published": "2026-10-12",
+      "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/42947/proofs/577e0b7c207e92f1ed64276a91ff1427dfc8cd8f1f09dccf790eaf874a6c814f.drat.xz"
+    },
     "5785a3a401092ed4a6d672475a84fc737315e1d4d965937ee920cdfa26ba4ecf": {
       "bytes": 92157421,
       "compressed": {
@@ -13486,6 +13513,15 @@
       "published": "2026-10-10",
       "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/42947/proofs/5ac9c4ffe63c97112b88b82a1f696cebcb4fa289e78a748d8ffdcd6b61fe3444.drat.xz"
     },
+    "5acd86d533cb89e9c82bf5946701b28c08d2ba1a30ed8ce2df24aa040504165a": {
+      "bytes": 434481036,
+      "compressed": {
+        "bytes": 139113920,
+        "sha256": "dc4a861d151f660a862c53ff3bff4786a031bb88415d00c8e595c39eb8ecb582"
+      },
+      "published": "2026-10-12",
+      "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/42947/proofs/5acd86d533cb89e9c82bf5946701b28c08d2ba1a30ed8ce2df24aa040504165a.drat.xz"
+    },
     "5ad1fe6ed8d3b4af229d1e26fd4ff3e2e7e3e9870b9975f731e108b2cc486371": {
       "bytes": 16570,
       "compressed": {
@@ -13584,6 +13620,15 @@
       },
       "published": "2026-10-10",
       "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/42947/proofs/5b61182d32ebf6ef44c9357f47dde78fff91d469c4d766f1ef48033b1abbf100.drat.xz"
+    },
+    "5b76465e3d98d71d1cdeb557d7a711dc5634db22aad019be3ae12b38ec957806": {
+      "bytes": 13690510696,
+      "compressed": {
+        "bytes": 5531713052,
+        "sha256": "9d7157a7686e377a33602529f544aff7d7039af8c2c7b54de06fa548790a6ed0"
+      },
+      "published": "2026-10-13",
+      "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/42947/proofs/5b76465e3d98d71d1cdeb557d7a711dc5634db22aad019be3ae12b38ec957806.drat.xz"
     },
     "5b793b4af176588d91810fd2c0624eab48adfd21eded8fd2efe9ba690bde9de0": {
       "bytes": 188853161,
@@ -26652,6 +26697,15 @@
       },
       "published": "2026-10-10",
       "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/42947/proofs/af3f44e4b806c6f83670b278356716006e94b5371a38cc258baddba29c6c64db.drat.xz"
+    },
+    "af41b274f2817116c3fcbb962bcb07922e18ede47f2b29a445f3b696a2fb847a": {
+      "bytes": 3734764371,
+      "compressed": {
+        "bytes": 1461013908,
+        "sha256": "5d48e56c0aa88c92a023cb2f3e4ea837d93d55cc11ff5114a1aa1fee5f639972"
+      },
+      "published": "2026-10-12",
+      "url": "https://polycubes.s3.us-west-2.amazonaws.com/public/9/42947/proofs/af41b274f2817116c3fcbb962bcb07922e18ede47f2b29a445f3b696a2fb847a.drat.xz"
     },
     "af511ac7cbc72266ae6e427ee04e48cb8c6626b79d24e33af6267e8e839ef895": {
       "bytes": 77612292,
