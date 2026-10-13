@@ -92,7 +92,7 @@ module Census
 
       def solved_with(count)
         "cube-and-conquer through polycubing@home: #{count} cube refutations by #{solver}, " \
-          "each DRAT proof checked by #{checker} on delivery; cover audited by script/audit-cubes"
+          "each DRAT proof checked by #{checker}; cover audited by script/audit-cubes"
       end
 
       def stamp(path, sha256:, count:)

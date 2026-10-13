@@ -10,18 +10,28 @@
   "tiles_with_reflections": false,
   "certificate": {
     "adjacency": "26",
+    "checked": {
+      "checker": "drat-trim 2e3b2dc",
+      "date": "2026-10-13",
+      "proofs": 9103,
+      "verdict": "VERIFIED"
+    },
     "derived_from": null,
     "heesch": 1,
     "provenance": "computed",
-    "refutation": "cnf/ledgers/c42947-{cubes,blade,blade2}.icnf.results.jsonl",
-    "refutation_kind": "ledger",
-    "refutation_sha256": null,
-    "solved_with": "cube-and-conquer on kissat 4.0.4 (colo, 50 cores): 4096 sign-cubes + 475 clause-branch + 8225 clause-branch cubes, 12868 ledger entries, 12615 refutations, zero SATISFIABLE; cover verified by script/audit-cubes 2026-10-06; ledger-backed, per-cube DRAT campaign pending",
+    "refutation": "cnf/corona2.proofs.json",
+    "refutation_kind": "cube_proofs",
+    "refutation_sha256": "3b49bf33274c5bf7417a08afc5f4e2d7f9045b58d464a0885cd4cfbbb3b3c846",
+    "solved_with": "cube-and-conquer through polycubing@home: 9103 cube refutations by kissat 4.0.4, each DRAT proof checked by drat-trim 2e3b2dc; cover audited by script/audit-cubes; replaces: cube-and-conquer on kissat 4.0.4 (colo, 50 cores): 4096 sign-cubes + 475 clause-branch + 8225 clause-branch cubes, 12868 ledger entries, 12615 refutations, zero SATISFIABLE; cover verified by script/audit-cubes 2026-10-06; ledger-backed, per-cube DRAT campaign pending",
     "type": "heesch"
   },
   "heesch": 1,
   "budgets": { "box_max_volume": 96, "corona_depth": 2, "torus_max_index": 72 },
-  "credits": { "prior_art": null, "solved_by": "polycube-census v0.1.0", "verified_by": null },
+  "credits": {
+    "prior_art": null,
+    "solved_by": "polycube-census v0.2.0 (@home)",
+    "verified_by": null
+  },
   "reached": { "corona_refuted": 2 },
   "stages": [
     { "outcome": "exhausted", "stage": "box", "volume": 96 },
