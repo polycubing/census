@@ -329,13 +329,15 @@ module Census
           return "asked again"
         end
 
-        rows = held[:rows] || [held]
-        outcomes = rows.map { check_delivered(wanted: it, path: held[:path]) }
-        if @verified_to && outcomes.any? { it[:accepted] }
+        outcome = check_delivered(wanted: held, path: held[:path])
+        # One file can back many claims (the staircase's easy cubes all share
+        # one 14 KB proof), each checked on its own. The file moves only once
+        # the last claim on it is checked, and every claim follows it.
+        if outcome[:accepted] && @verified_to && !store.claims_waiting_on?(path: held[:path])
           destination = moved_once_verified(held[:path])
           store.repath_proofs(from: held[:path], to: destination)
         end
-        outcomes.all? { it[:accepted] } ? "verified" : "not verified"
+        outcome[:accepted] ? "verified" : "not verified"
       end
 
       # Take delivery of a proof and check it.
@@ -387,8 +389,7 @@ module Census
       # checked together: `rows` carries every claim of the file.
       def held_here(states:)
         here = "#{File.expand_path(proofs)}/"
-        mine = store.held_proofs(states:).select { it[:path].to_s.start_with?(here) }
-        mine.group_by { it[:path] }.values.map { |rows| rows.first.merge(rows:) }
+        store.held_proofs(states:).select { it[:path].to_s.start_with?(here) }
       end
 
       # The formula a cube unit refutes: the hub's own path when it exists
@@ -442,7 +443,9 @@ module Census
 
         FileUtils.mkdir_p(@verified_to)
         destination = File.join(@verified_to, File.basename(path))
-        FileUtils.mv(path, destination)
+        # Two workers can finish the last two claims on one file together;
+        # whichever moves it second finds it already there.
+        FileUtils.mv(path, destination) unless File.exist?(destination) && !File.exist?(path)
         destination
       end
 

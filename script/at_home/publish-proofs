@@ -84,7 +84,9 @@ def verified_paths(only_verified)
   return nil unless only_verified
 
   store = Census::AtHome::Store.new
-  paths = store.held_proofs(states: %w[verified]).map { it[:path] }.to_set
+  # A file that one claim has verified may still be what another claim is
+  # waiting to have checked: the staircase's easy cubes all share one proof.
+  paths = store.held_proofs(states: %w[verified]).map { it[:path] }.to_set - store.paths_still_needed
   store.close
   paths
 end

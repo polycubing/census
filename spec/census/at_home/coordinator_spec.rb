@@ -887,7 +887,7 @@ RSpec.describe Census::AtHome::Coordinator, "one file, several claims, on anothe
     File.binwrite(File.join(@proofs, "#{digest}.drat"), bytes)
     coordinator.adopt_proofs(directory: @proofs)
 
-    expect(coordinator.recheck(states: %w[stored], jobs: 2)).to eq({ "verified" => 1 })
+    expect(coordinator.recheck(states: %w[stored], jobs: 2)).to eq({ "verified" => 2 })
     expect(coordinator.status[:proofs]).to eq({ "verified" => 2 })
     expect(store.held_proofs(states: %w[verified]).map { it[:path] }.uniq).to eq([File.join(@verified, "#{digest}.drat")])
   end

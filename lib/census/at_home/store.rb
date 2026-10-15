@@ -239,6 +239,22 @@ module Census
         row && { id: Integer(row["id"]), path: row["proof_path"] }
       end
 
+      # Whether any claim on this file is still to be checked.
+      def claims_waiting_on?(path:)
+        synchronize do |connection|
+          connection.exec_params("SELECT 1 FROM results WHERE proof_path = $1 AND proof_state = 'stored' LIMIT 1", [path]).ntuples.positive?
+        end
+      end
+
+      # The paths of this directory's files that a claim still to be checked
+      # points at: not to be published away before the checker gets to them.
+      def paths_still_needed
+        rows = synchronize do |connection|
+          connection.exec("SELECT DISTINCT proof_path FROM results WHERE proof_state = 'stored' AND proof_path IS NOT NULL")
+        end
+        rows.map { it["proof_path"] }
+      end
+
       # A file moved: every claim pointing at it follows.
       def repath_proofs(from:, to:)
         synchronize do |connection|
