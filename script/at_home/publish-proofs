@@ -103,8 +103,20 @@ def publish(ledger, directory, dry_running)
   end
 end
 
+# The ledger goes to the bucket beside the proofs after any pass that
+# changed it, so a machine that cannot push to git (the colo) still leaves
+# the truth somewhere the laptop can collect it into git later.
+def mirror(ledger)
+  key = "public/#{ledger.shape_id}/#{File.basename(ledger.path)}"
+  system("aws", "s3", "cp", ledger.path, "s3://#{Census::AtHome::ProofLedger::BUCKET}/#{key}",
+         "--content-type", "application/json", "--only-show-errors", exception: true)
+  puts "ledger mirrored to #{key}"
+end
+
 loop do
+  before = ledger.size
   publish(ledger, directory, dry_running)
+  mirror(ledger) if ledger.size != before && !dry_running
   break unless looping
 
   sleep 300

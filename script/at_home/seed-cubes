@@ -43,34 +43,41 @@ end
 
 arguments = ARGV.dup
 dry_running = flag? arguments, '--dry-run'
+open_campaign = flag? arguments, '--open'
 formula = option arguments, '--formula', nil
+depth = option arguments, '--depth', nil
 unknown = arguments.select { it.start_with? '--' }
 abort "unknown option(s): #{unknown.join ' '}" unless unknown.empty?
 
 id = arguments.shift
 paths = arguments
-abort 'usage: script/at_home/seed-cubes <id> <level1.icnf> [<level2.icnf> ...] [--formula PATH] [--dry-run]' if id.nil? || paths.empty?
+abort 'usage: script/at_home/seed-cubes <id> <level1.icnf> [<level2.icnf> ...] [--formula PATH] [--depth K] [--open] [--dry-run]' if id.nil? || paths.empty?
+abort '--open takes exactly one cube file, a partition of the search space' if open_campaign && paths.size != 1
 
 root = File.expand_path '../../data', __dir__
 record = JSON.parse File.read(File.join(root, id, 'shape.json')), symbolize_names: true
-depth = record.dig :reached, :corona_refuted
+depth ||= record.dig(:reached, :corona_refuted) || abort("no depth known for #{id}, pass --depth")
 formula ||= File.join root, id, 'cnf', "corona#{depth}.cnf"
 formula = File.expand_path formula
 abort "formula not found: #{formula}" unless File.exist? formula
 
 levels = paths.map { Census::SAT::CubeTree.level it }
 tree = Census::SAT::CubeTree.new(levels:)
-unless tree.closed?
-  tree.failures.each { puts "FAIL #{it}" }
-  abort 'the cover is not closed, nothing queued'
+if open_campaign
+  puts "#{id}: open campaign, #{tree.levels.first.fetch(:cubes).size} cubes to settle, ledgers ignored"
+else
+  unless tree.closed?
+    tree.failures.each { puts "FAIL #{it}" }
+    abort 'the cover is not closed, nothing queued'
+  end
+  puts "#{id}: #{tree.leaves.size} cube refutations to prove, #{tree.split_nodes.size + 1} split units above them"
 end
-
-puts "#{id}: #{tree.leaves.size} cube refutations to prove, #{tree.split_nodes.size + 1} split units above them"
 puts "formula: #{formula} (#{File.size formula} bytes)"
 exit if dry_running
 
 store = Census::AtHome::Store.new
-seeder = Census::AtHome::CubeSeeder.new store:, tree:, shape_id: id, cells: record[:cells], budgets: record[:budgets], cnf_path: formula
+seeder = Census::AtHome::CubeSeeder.new(store:, tree:, shape_id: id, cells: record[:cells], budgets: record[:budgets],
+                                        cnf_path: formula, open: open_campaign)
 counts = seeder.seed
 puts "queued #{counts[:leaves]} pending cube units under #{counts[:splits]} split units"
 puts store.status.inspect

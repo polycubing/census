@@ -14,16 +14,25 @@ module Census
     class CubeSeeder
       class AlreadySeeded < StandardError; end
 
-      def initialize(store:, tree:, shape_id:, cells:, budgets:, cnf_path:)
+      #
+      # open: an open campaign rather than a re-proof. The tree's first level
+      # is a partition of the search space whose cubes have not been settled,
+      # and every one of them goes in pending, ledgers ignored. The hub
+      # splits the hard ones as they exhaust. The shape closes only if every
+      # cube is refuted with a proof; a satisfying cube is a witness.
+      def initialize(store:, tree:, shape_id:, cells:, budgets:, cnf_path:, open: false)
         @store = store
         @tree = tree
         @shape_id = shape_id
         @cells = cells
         @budgets = budgets
         @cnf_path = cnf_path
+        @open = open
       end
 
       def seed
+        return seed_open if @open
+
         raise ArgumentError, "cover is not closed: #{tree.failures.join('. ')}" unless tree.closed?
 
         shape_unit = store.add_unit(kind: "shape", shape_id:, payload: { cells:, budgets: })
@@ -39,6 +48,16 @@ module Census
       private
 
       attr_reader :budgets, :cells, :cnf_path, :shape_id, :store, :tree
+
+      def seed_open
+        shape_unit = store.add_unit(kind: "shape", shape_id:, payload: { cells:, budgets: })
+        raise AlreadySeeded, "#{shape_id} already has a shape unit" unless shape_unit
+
+        store.close_unit(id: shape_unit, status: "split")
+        cubes = tree.levels.first.fetch(:cubes)
+        cubes.each { store.add_unit(kind: "cube", shape_id:, parent_id: shape_unit, payload: { cnf_path:, cnf_sha256:, cube: it }) }
+        { leaves: cubes.size, splits: 1 }
+      end
 
       def cnf_sha256 = @cnf_sha256 ||= Digest::SHA256.file(cnf_path).hexdigest
 

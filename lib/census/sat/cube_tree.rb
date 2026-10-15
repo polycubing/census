@@ -39,9 +39,11 @@ module Census
         @nodes
       end
 
-      private
-
+      # The levels as given, for an open campaign that seeds the first one
+      # without needing the tree to close.
       attr_reader :levels
+
+      private
 
       def build
         return true if @nodes
