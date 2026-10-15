@@ -412,6 +412,31 @@ module Census
         system("xz", "--decompress", "--force", compressed, exception: true)
       end
 
+      # The formula a proof refutes, rebuilt from the base CNF plus the cube,
+      # streamed to drat-trim through a named pipe rather than written to
+      # disk: drat-trim reads it once, and the staircase's corona-3 formula
+      # is 3.9 GB, which two checkers at once could not spare on the colo.
+      # The writer is a thread; if drat-trim never opens the pipe (it died
+      # on its arguments), the thread is blocked in open and is killed.
+      def with_formula_stream(unit)
+        cnf_path = formula_for_check(unit)
+        cube = unit.fetch(:cube, [])
+        Dir.mktmpdir("census-cube") do |dir|
+          fifo = File.join(dir, "formula.cnf")
+          File.mkfifo(fifo)
+          writer = Thread.new do
+            File.open(fifo, "w") { |io| SAT::CubeFile.stream_augmented(cnf_path:, cube:, io:) }
+          rescue Errno::EPIPE
+            nil
+          end
+          begin
+            yield fifo
+          ensure
+            writer.kill unless writer.join(5)
+          end
+        end
+      end
+
       def moved_once_verified(path)
         return path unless @verified_to
 
@@ -511,10 +536,8 @@ module Census
       def check_delivered(wanted:, path:)
         unit = wanted[:unit]
 
-        result = Tempfile.create(["census-cube", ".cnf"]) do |formula|
-          SAT::CubeFile.stream_augmented(cnf_path: formula_for_check(unit), cube: unit.fetch(:cube, []), io: formula)
-          formula.flush
-          SAT::DratTrim.check(cnf_path: formula.path, proof_path: path, timeout: check_timeout)
+        result = with_formula_stream(unit) do |formula_path|
+          SAT::DratTrim.check(cnf_path: formula_path, proof_path: path, timeout: check_timeout)
         end
 
         state = result.verified? ? "verified" : "refuted"
