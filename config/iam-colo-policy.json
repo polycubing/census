@@ -4,7 +4,7 @@
     {
       "Sid": "PublishStaircaseProofsOnly",
       "Effect": "Allow",
-      "Action": "s3:PutObject",
+      "Action": ["s3:PutObject", "s3:GetObject"],
       "Resource": "arn:aws:s3:::polycubes/public/9/2127/*"
     }
   ]
