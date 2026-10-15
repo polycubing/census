@@ -31,6 +31,9 @@
 
 require_relative '../../lib/census'
 
+# One line per proof, as it happens, even through a pipe into tee.
+$stdout.sync = true
+
 def option arguments, flag, default
   position = arguments.index flag
   return default if position.nil?
