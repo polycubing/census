@@ -59,10 +59,11 @@ module Census
       def initialize(store:, lease_seconds: 900, proofs: DEFAULT_PROOFS, proof_policy: :on_request,
                      max_proof_bytes: MAX_PROOF_BYTES, check_timeout: SAT::DratTrim::DEFAULT_TIMEOUT, check_on_delivery: true,
                      basin_high_bytes: nil, basin_low_bytes: nil, disk_floor_bytes: nil, free_disk: nil,
-                     formulas: nil, verified_to: nil)
+                     formulas: nil, verified_to: nil, split_variables: [])
         raise ArgumentError, "proof_policy must be one of #{PROOF_POLICIES.inspect}" unless PROOF_POLICIES.include?(proof_policy)
 
         @store = store
+        @split_variables = split_variables
         @lease_seconds = lease_seconds
         @proofs = proofs
         @formulas = formulas
@@ -503,10 +504,17 @@ module Census
       # The lowest variable the cube does not already fix. Deterministic and
       # sound. A lookahead solver would choose a variable that splits the work
       # more evenly, which is an optimization, not a correctness matter.
+      #
+      # Preferred variables first, when the campaign names some: the
+      # staircase's monsters split on their lowest unfixed variable all hit
+      # the proof cap again at the same point, while August's split of one
+      # of them on four particular variables had the children fall in
+      # seconds. Those four are structural to the formula, not to the cube.
       def branching_variable(payload)
         fixed = payload.fetch(:cube, []).map(&:abs)
 
-        (1..variable_count(payload[:cnf_path])).find { !fixed.include?(it) }
+        @split_variables.find { !fixed.include?(it) } ||
+          (1..variable_count(payload[:cnf_path])).find { !fixed.include?(it) }
       end
 
       def variable_count(cnf_path)

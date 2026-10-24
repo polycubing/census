@@ -947,3 +947,37 @@ RSpec.describe Census::AtHome::Coordinator, "leasing order", :home do
     expect(coordinator.lease(client_id: worker[:id])[:cube]).to eq([2])
   end
 end
+
+RSpec.describe Census::AtHome::Coordinator, "splitting on preferred variables", :home do
+  let(:store) { Census::AtHome::Store.new }
+  let(:contradiction) { "spec/fixtures/proof/contradiction.cnf" }
+  let(:coordinator) { described_class.new(store:, split_variables: [5, 3]) }
+
+  before do
+    store.load_schema(File.expand_path("../../../db/at_home.sql", __dir__))
+    store.reset
+  end
+
+  after { store.close }
+
+  it "branches on the first preferred variable the cube does not fix, before the lowest" do
+    store.add_unit(kind: "cube", shape_id: "9/2127", payload: { cnf_path: contradiction, cube: [5] })
+    worker = coordinator.register(handle: "spec")
+    unit = coordinator.lease(client_id: worker[:id])
+
+    answer = coordinator.submit(unit_id: unit[:id], client_id: worker[:id], verdict: "exhausted", payload: { cube: [5] })
+
+    expect(answer[:note]).to match(/split on variable 3 into 2/)
+    expect([2, 3].map { store.unit(it)[:payload][:cube] }).to contain_exactly([5, 3], [5, -3])
+  end
+
+  it "falls back to the lowest unfixed variable once the preferred ones are used" do
+    store.add_unit(kind: "cube", shape_id: "9/2127", payload: { cnf_path: contradiction, cube: [5, -3] })
+    worker = coordinator.register(handle: "spec")
+    unit = coordinator.lease(client_id: worker[:id])
+
+    answer = coordinator.submit(unit_id: unit[:id], client_id: worker[:id], verdict: "exhausted", payload: { cube: [5, -3] })
+
+    expect(answer[:note]).to match(/split on variable 1 into 2/)
+  end
+end

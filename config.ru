@@ -33,6 +33,9 @@ check_on_delivery = ENV.fetch("AT_HOME_DEFER_CHECKS", "0") != "1"
 # past the clients' --cube-timeout: at the triskelion's tail, fifteen-minute
 # leases on multi-hour cubes had two clients solving the same cube.
 lease_seconds = Integer(ENV.fetch("AT_HOME_LEASE_SECONDS", "900"))
+# Variables to split an exhausted cube on, in order, before falling back to
+# the lowest unfixed one: AT_HOME_SPLIT_VARIABLES=3581,91,256,250.
+split_variables = ENV.fetch("AT_HOME_SPLIT_VARIABLES", "").split(",").map { Integer(it) }
 # The basin: the faucet closes when held-plus-expected proof bytes pass the
 # high mark or free disk under the proof directory drops below the floor, and
 # reopens below the low mark. Gigabytes. Unset means no limit.
@@ -41,7 +44,7 @@ basin_high_bytes = gigabytes.call("AT_HOME_BASIN_HIGH_GB")
 basin_low_bytes = gigabytes.call("AT_HOME_BASIN_LOW_GB")
 disk_floor_bytes = gigabytes.call("AT_HOME_DISK_FLOOR_GB")
 Census::AtHome::Server.coordinator = Census::AtHome::Coordinator.new(store:, proofs:, proof_policy:, max_proof_bytes:,
-                                                                     check_timeout:, check_on_delivery:, lease_seconds:,
+                                                                     check_timeout:, check_on_delivery:, lease_seconds:, split_variables:,
                                                                      basin_high_bytes:, basin_low_bytes:, disk_floor_bytes:)
 
 run Census::AtHome::Server
