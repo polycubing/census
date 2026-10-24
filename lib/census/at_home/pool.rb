@@ -8,7 +8,14 @@ module Census
     # mutex-guarded connection that served the WEBrick spike would serialize
     # the whole coordinator; this hands each request its own connection and
     # blocks only when every one is busy.
+    #
+    # A connection the server has dropped is discarded and the work retried
+    # once on a fresh one. Postgres on the colo crashed and recovered in
+    # twenty seconds on 2026-10-17, and the hub then answered every request
+    # for a week with the dead sockets it still held.
     class Pool
+      DROPPED = [PG::ConnectionBad, PG::UnableToSend].freeze
+
       def initialize(url:, size: 8, timeout: 5)
         @url = url
         @size = size
@@ -19,11 +26,21 @@ module Census
       end
 
       def with
-        connection = checkout
+        tries = 0
         begin
-          yield connection
-        ensure
-          @available << connection
+          connection = checkout
+          broken = false
+          begin
+            yield connection
+          rescue *DROPPED
+            broken = true
+            raise
+          ensure
+            broken ? discard(connection) : @available << connection
+          end
+        rescue *DROPPED
+          retry if (tries += 1) <= 1
+          raise
         end
       end
 
@@ -42,6 +59,15 @@ module Census
           end
         end
         Timeout.timeout(timeout) { @available.pop }
+      end
+
+      def discard(connection)
+        begin
+          connection.close
+        rescue StandardError
+          nil
+        end
+        mutex.synchronize { @created -= 1 }
       end
 
       attr_reader :mutex, :size, :timeout, :url
