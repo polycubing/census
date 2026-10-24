@@ -20,7 +20,11 @@ data/**/tiling.obj
 data/**/tiling.mtl
 
 # SAT artifacts over GitHub's 100 MB cap — destined for S3, linked from .md files
-data/9/2127/cnf/
+data/9/2127/cnf/*
+# The staircase's corona-3 campaign: which proofs are in the bucket, and the
+# campaign database as dumped when it paused on 2026-10-24.
+!data/9/2127/cnf/corona3.published.json
+!data/9/2127/cnf/corona3.at-home.sql.xz
 data/9/8219/cnf/
 data/9/20656/cnf/
 data/9/24025/cnf/
