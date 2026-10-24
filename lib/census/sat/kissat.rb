@@ -50,13 +50,30 @@ module Census
       # shipped anywhere.
       # With a timeout, an unfinished cube comes back :undecided rather than
       # running forever on a volunteer's laptop.
-      def self.solve_cube(cnf_path:, cube:, proof_path: nil, timeout: nil)
+      # With max_proof_bytes, a proof that grows past it stops the solver and
+      # the cube comes back :undecided too: a cube whose proof will not fit
+      # is a cube to split, and a disk is not the place to find that out.
+      #
+      # The augmented formula goes to kissat through a named pipe rather than
+      # a file. kissat reads it once, and six clients each writing a 3.9 GB
+      # copy of the staircase's corona-3 formula was a third of the colo's
+      # free disk.
+      def self.solve_cube(cnf_path:, cube:, proof_path: nil, timeout: nil, max_proof_bytes: nil)
         return streamed_cube(cnf_path:, cube:) unless proof_path
 
-        Tempfile.create(["census-cube", ".cnf"]) do |file|
-          CubeFile.stream_augmented(cnf_path:, cube:, io: file)
-          file.flush
-          run(file.path, proof_path:, timeout:)
+        Dir.mktmpdir("census-cube") do |dir|
+          fifo = File.join(dir, "formula.cnf")
+          File.mkfifo(fifo)
+          writer = Thread.new do
+            File.open(fifo, "w") { |io| CubeFile.stream_augmented(cnf_path:, cube:, io:) }
+          rescue Errno::EPIPE
+            nil
+          end
+          begin
+            run(fifo, proof_path:, timeout:, max_proof_bytes:)
+          ensure
+            writer.kill unless writer.join(5)
+          end
         end
       end
 
@@ -75,15 +92,41 @@ module Census
 
       # With a progress IO, kissat runs un-quieted and its periodic statistics
       # lines stream there live; the verdict lines are parsed as usual.
-      def self.run(path, proof_path: nil, progress: nil, timeout: nil)
+      def self.run(path, proof_path: nil, progress: nil, timeout: nil, max_proof_bytes: nil)
         command = [ENV.fetch("CENSUS_SOLVER", "kissat")]
         command << "--quiet" unless progress
         command << "--time=#{timeout}" if timeout
         command << path
         command << proof_path if proof_path
         return streamed(command, progress) if progress
+        return capped(command, proof_path, max_proof_bytes) if proof_path && max_proof_bytes
 
         output, status = Open3.capture2(*command)
+        verdict(status.exitstatus, output)
+      end
+
+      # Run with a watcher on the proof file: past the cap, kissat is stopped
+      # and the answer is :undecided, the same as a time limit.
+      def self.capped(command, proof_path, max_proof_bytes)
+        over = false
+        output = nil
+        status = nil
+        Open3.popen2(*command) do |_stdin, stdout, waiter|
+          watcher = Thread.new do
+            until waiter.join(2)
+              next unless File.exist?(proof_path) && File.size(proof_path) > max_proof_bytes
+
+              over = true
+              Process.kill("TERM", waiter.pid)
+              break
+            end
+          end
+          output = stdout.read
+          status = waiter.value
+          watcher.join
+        end
+        return :undecided if over
+
         verdict(status.exitstatus, output)
       end
 

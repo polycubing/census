@@ -81,3 +81,22 @@ RSpec.describe Census::SAT::Kissat do
 
   def contradiction = "spec/fixtures/proof/contradiction.cnf"
 end
+
+RSpec.describe Census::SAT::Kissat, "a proof over the cap" do
+  let(:pigeonhole) { File.expand_path("../../fixtures/proof/pigeonhole.cnf", __dir__) }
+
+  around { |example| Dir.mktmpdir { |dir| @dir = dir and example.run } }
+
+  # The staircase's monsters wrote proofs of tens of gigabytes into /tmp
+  # until the disk was full and Postgres fell over. A cube whose proof will
+  # not fit is a cube to split, found out at the cap and not at the disk.
+  it "stops the solver and comes back undecided" do
+    proof_path = File.join(@dir, "proof.drat")
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+
+    result = described_class.solve_cube(cnf_path: pigeonhole, cube: [], proof_path:, max_proof_bytes: 1_000_000)
+
+    expect(result).to eq(:undecided)
+    expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be < 30
+  end
+end

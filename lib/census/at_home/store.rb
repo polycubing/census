@@ -115,7 +115,7 @@ module Census
             WHERE id = (
               SELECT id FROM units
               WHERE status = 'pending' OR (status = 'leased' AND lease_until < now())
-              ORDER BY id
+              ORDER BY attempts, id
               FOR UPDATE SKIP LOCKED
               LIMIT 1
             )

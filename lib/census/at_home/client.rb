@@ -47,7 +47,7 @@ module Census
 
       def initialize(url:, handle:, display_name: nil, contact: nil, report: nil, give_up_after: nil,
                      proofs: DEFAULT_PROOFS, formulas: DEFAULT_FORMULAS, cube_timeout: DEFAULT_CUBE_TIMEOUT, disk_floor_bytes: nil,
-                     hold_proofs: false)
+                     hold_proofs: false, max_proof_bytes: nil)
         @base = URI(url)
         @handle = handle
         @display_name = display_name
@@ -59,6 +59,7 @@ module Census
         @cube_timeout = cube_timeout
         @disk_floor_bytes = disk_floor_bytes
         @hold_proofs = hold_proofs
+        @max_proof_bytes = max_proof_bytes
         @client_id = nil
       end
 
@@ -136,7 +137,7 @@ module Census
       private
 
       attr_reader :base, :client_id, :contact, :cube_timeout, :disk_floor_bytes, :display_name, :formulas, :give_up_after,
-                  :handle, :hold_proofs, :proofs, :report
+                  :handle, :hold_proofs, :max_proof_bytes, :proofs, :report
 
       # A solver that dies (a full disk, a kill, a bad build) is reported as
       # an error, which the coordinator turns into a released unit for someone
@@ -175,11 +176,16 @@ module Census
         return ["error", { note: "formula unavailable" }] unless cnf_path
 
         Tempfile.create(["census", ".drat"]) do |file|
+          started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
           model = SAT::Kissat.solve_cube(cnf_path:, cube: unit[:cube], proof_path: file.path,
-                                         timeout: cube_timeout)
+                                         timeout: cube_timeout, max_proof_bytes:)
 
-          # Handed back rather than abandoned: the coordinator splits it.
-          return ["exhausted", { cube: unit[:cube], seconds: cube_timeout }] if model == :undecided
+          # Handed back rather than abandoned: the coordinator splits it. Out
+          # of time, or a proof grown past the cap, are the same answer.
+          if model == :undecided
+            seconds = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).round
+            return ["exhausted", { cube: unit[:cube], seconds:, proof_bytes: File.size(file.path) }]
+          end
           return ["sat", { model: model.to_a }] if model
 
           ["unsat", { cube: unit[:cube], proof: kept(SAT::Proof.of(file.path)).to_h }]

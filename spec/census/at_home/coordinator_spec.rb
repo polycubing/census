@@ -923,3 +923,27 @@ RSpec.describe Census::AtHome::Coordinator, "one file, several claims, on anothe
     expect(coordinator.status[:proofs]).to eq({ "stored" => 1 })
   end
 end
+
+RSpec.describe Census::AtHome::Coordinator, "leasing order", :home do
+  let(:store) { Census::AtHome::Store.new }
+  let(:coordinator) { described_class.new(store:) }
+
+  before do
+    store.load_schema(File.expand_path("../../../db/at_home.sql", __dir__))
+    store.reset
+  end
+
+  after { store.close }
+
+  # Five cubes that failed every time were leased again and again, by id,
+  # while 129 cubes behind them were never tried once.
+  it "hands out a unit nobody has tried before one that came back" do
+    first = store.add_unit(kind: "cube", shape_id: "9/2127", payload: { cnf_path: "/nowhere.cnf", cube: [1] })
+    store.add_unit(kind: "cube", shape_id: "9/2127", payload: { cnf_path: "/nowhere.cnf", cube: [2] })
+    worker = coordinator.register(handle: "spec")
+    expect(coordinator.lease(client_id: worker[:id])[:id]).to eq(first)
+    coordinator.submit(unit_id: first, client_id: worker[:id], verdict: "error", payload: { note: "kissat died" })
+
+    expect(coordinator.lease(client_id: worker[:id])[:cube]).to eq([2])
+  end
+end
